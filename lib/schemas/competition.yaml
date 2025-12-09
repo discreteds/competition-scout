@@ -1,0 +1,109 @@
+# Competition Scout - Shared Data Schemas
+# Used for cross-skill data exchange
+#
+# These schemas define the data structures passed between skills.
+# They are documentation/contracts - not enforced programmatically.
+
+# =============================================================================
+# COMPETITION
+# =============================================================================
+# Output from comp-scout-scrape skill
+# Input to comp-scout-analyze and comp-scout-persist skills
+
+competition:
+  # Source information
+  url: string                    # Full URL to competition page
+  site: string                   # Source aggregator (competitions.com.au, netrewards.com.au)
+
+  # Basic details
+  title: string                  # Competition title
+  brand: string                  # Sponsoring brand/company
+
+  # Prize information
+  prize_summary: string          # Prize description text
+  prize_value: int | null        # Dollar value if extractable
+
+  # Entry requirements
+  prompt: string                 # The question/prompt to answer
+  word_limit: int                # Maximum words allowed (usually 25)
+
+  # Important dates
+  closing_date: date             # When entries close
+  draw_date: date | null         # When winners are drawn/judged
+  winners_notified_date: date | null  # When winners will be notified
+
+# =============================================================================
+# STRATEGY
+# =============================================================================
+# Output from comp-scout-analyze skill
+# Input to comp-scout-compose skill
+
+strategy:
+  competition_url: string        # Reference to competition
+
+  # Brand analysis
+  brand: string                  # Brand name
+  brand_voice: string            # How the brand communicates
+  sponsor_category: string       # wellness/tech/food/travel/retail/rural
+
+  # Entry recommendations
+  recommended_tone: string       # e.g., "playful with genuine warmth"
+  approach: string               # Strategic guidance paragraph
+
+  # Creative direction
+  themes_to_use:                 # Key themes to incorporate
+    - string
+  words_to_consider:             # Specific words that might resonate
+    - string
+  angle_ideas:                   # 3-5 different approaches
+    - string                     # e.g., "Sincere: The Sunday morning ritual..."
+
+  # Pitfalls
+  avoid:                         # Things to avoid
+    - string
+
+# =============================================================================
+# ENTRY
+# =============================================================================
+# Output from comp-scout-compose skill
+
+entry:
+  text: string                   # The actual entry text
+  word_count: int                # Must be <= word_limit
+  arc_type: string               # sincere, comedic_callback, self_deprecating, list_pivot
+  approach: string               # e.g., "warm", "punchy", "self-deprecating"
+  landing_strength: int          # 1-5 rating of final line impact
+  notes: string                  # Why this entry works
+
+# =============================================================================
+# ENTRY SET
+# =============================================================================
+# Full output from comp-scout-compose skill
+
+entry_set:
+  entries:
+    - entry                      # Array of entry objects
+  recommendation: int            # Index of recommended entry (0-based)
+
+# =============================================================================
+# GITHUB ISSUE MAPPING
+# =============================================================================
+# How competition data maps to GitHub issue fields
+
+github_issue:
+  title: string                  # "{brand}: {title}" or just "{title}"
+  body: string                   # Structured markdown (see comp-scout-persist SKILL.md)
+  labels:
+    - competition                # Always applied
+    - 25wol                      # 25 words or less type
+    - closing-soon               # Auto-applied when < 3 days to close
+    - entry-drafted              # Entry has been composed
+    - entry-submitted            # Entry has been submitted
+  milestone: string              # By closing date month (e.g., "December 2024")
+
+  # Comments can contain:
+  # - Additional sources (duplicate competitions from other sites)
+  # - Strategy analysis
+  # - Draft entries
+  # - Submission confirmation
+  # - Winner notification
