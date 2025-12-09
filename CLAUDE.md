@@ -6,12 +6,16 @@ Claude Code skills for scraping competitions, analyzing strategy, composing entr
 
 | Skill | Purpose | Python |
 |-------|---------|--------|
-| `comp-scout-scrape` | Scrape competition websites with LLM interpretation | Yes (~100 lines) |
+| `comp-scout-scrape` | Scrape competition websites with LLM interpretation | Yes |
 | `comp-scout-analyze` | Generate strategy analysis (tone, themes, approach) | No |
 | `comp-scout-compose` | Create 25-words-or-less entries | No |
 | `comp-scout-persist` | Store to GitHub issues with project integration | No |
+| `comp-scout-notify` | Send email digest of competitions | Yes |
+| `comp-scout-daily` | End-to-end automated workflow for cron execution | No |
 
 ## Skill Hierarchy
+
+### Interactive Mode (individual skills)
 
 ```
 comp-scout-scrape
@@ -26,6 +30,25 @@ comp-scout-persist   comp-scout-analyze
                           ▼
                     comp-scout-persist (update issue with entry)
 ```
+
+### Automated Mode (daily workflow)
+
+```
+                    comp-scout-daily
+                          │
+    ┌─────────────────────┼──────────────────────┐
+    │                     │                      │
+    ▼                     ▼                      ▼
+comp-scout-scrape   comp-scout-analyze    comp-scout-notify
+    │                     │
+    ▼                     ▼
+comp-scout-persist  comp-scout-compose
+                          │
+                          ▼
+                    comp-scout-persist
+```
+
+The daily workflow orchestrates all skills in sequence, running unattended for cron execution.
 
 ## Prerequisites
 
@@ -71,6 +94,19 @@ Skills are invoked by asking Claude to use them:
 
 "Save this competition to GitHub"
 → Uses comp-scout-persist
+
+"Send me a competition digest"
+→ Uses comp-scout-notify
+
+"Perform daily competition scout"
+→ Uses comp-scout-daily (full automated workflow)
+```
+
+### Cron Automation
+
+For automated daily runs:
+```bash
+0 7 * * * claude -p "Perform daily competition scout" >> /var/log/comp-scout.log 2>&1
 ```
 
 ## Deduplication

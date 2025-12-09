@@ -95,6 +95,36 @@ For competitions not already tracked, get full details:
 python skills/comp-scout-scrape/scraper.py detail "https://competitions.com.au/win-example/"
 ```
 
+For multiple new competitions, use batch mode:
+
+```bash
+echo '{"urls": ["url1", "url2", ...]}' | python skills/comp-scout-scrape/scraper.py details-batch
+```
+
+### Step 4.5: Apply Auto-Filter Rules
+
+Before persisting, check competitions against user preferences from the data repo's CLAUDE.md.
+
+1. Fetch preferences:
+```bash
+gh api repos/$TARGET_REPO/contents/CLAUDE.md -H "Accept: application/vnd.github.raw" 2>/dev/null
+```
+
+2. Parse the Detection Keywords section for filter rules
+
+3. For each competition, check if title/prize matches any keywords:
+```
+For each filter_rule in [for-kids, cruise]:
+  For each keyword in filter_rule.keywords:
+    If keyword.lower() in (competition.title + competition.prize_summary).lower():
+      Mark competition as filtered
+      Filter label: filter_rule.label
+```
+
+4. Filtered competitions are still persisted (for record-keeping) but:
+   - Add the filter label (e.g., `for-kids`, `cruise`)
+   - Close the issue immediately with explanation comment
+
 ### Step 5: Auto-Persist Results
 
 #### For New Competitions → Create Issue
@@ -145,6 +175,31 @@ EOF
 )"
 ```
 
+#### For Filtered Competitions → Create Issue + Close
+
+If competition matched auto-filter keywords:
+
+```bash
+# Create the issue first (for record-keeping)
+ISSUE_URL=$(gh issue create -R "$TARGET_REPO" \
+  --title "$TITLE" \
+  --label "competition" \
+  --label "25wol" \
+  --label "$FILTER_LABEL" \
+  --body "...")
+
+# Extract issue number
+ISSUE_NUMBER=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
+
+# Close with explanation
+gh issue close $ISSUE_NUMBER -R "$TARGET_REPO" --comment "$(cat <<'EOF'
+Auto-filtered: matches '$KEYWORD' in $FILTER_RULE preferences.
+
+See CLAUDE.md in this repository for filter settings.
+EOF
+)"
+```
+
 ### Step 6: Report Results
 
 Present confirmation to user:
@@ -156,6 +211,10 @@ Present confirmation to user:
 - #42: Win a $500 Coles Gift Card (closes Dec 31)
 - #43: Win a Trip to Bali (closes Jan 15)
 - #44: Win a Year's Supply of Coffee (closes Dec 20)
+
+**Auto-filtered 2 (created + closed):**
+- #45: Win Lego Set (for-kids: matched "Lego")
+- #46: Win P&O Cruise (cruise: matched "P&O")
 
 **Found 2 duplicates (added as comments):**
 - #38: Win Woolworths Gift Cards (also on netrewards.com.au)
@@ -264,8 +323,29 @@ python skills/comp-scout-scrape/scraper.py listings
 # Get full details for one competition
 python skills/comp-scout-scrape/scraper.py detail "URL"
 
+# Get full details for multiple competitions (batch mode)
+echo '{"urls": ["url1", "url2"]}' | python skills/comp-scout-scrape/scraper.py details-batch
+
 # Debug: just get URLs
 python skills/comp-scout-scrape/scraper.py urls
+```
+
+### Batch Details Output
+
+```json
+{
+  "details": [
+    {
+      "url": "...",
+      "title": "...",
+      "prompt": "Tell us in 25 words...",
+      "word_limit": 25,
+      ...
+    }
+  ],
+  "scrape_date": "2024-12-09",
+  "errors": []
+}
 ```
 
 ## Integration

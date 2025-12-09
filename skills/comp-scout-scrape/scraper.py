@@ -6,7 +6,11 @@ Uses Playwright (sync) for JS-rendered pages.
 Usage:
     python scraper.py listings              # Scrape all listing pages, return structured data
     python scraper.py detail URL            # Scrape single competition page
+    python scraper.py details-batch         # Fetch full details for multiple URLs (reads JSON from stdin)
     python scraper.py urls                  # Just list competition URLs (for debugging)
+
+Batch details example:
+    echo '{"urls": ["url1", "url2"]}' | python scraper.py details-batch
 """
 
 import json
@@ -731,6 +735,55 @@ def scrape_detail(url: str) -> dict:
     return result
 
 
+def scrape_details_batch(urls: list[str]) -> dict:
+    """Scrape full details for multiple competition URLs.
+
+    Reuses browser context for efficiency when fetching many pages.
+
+    Args:
+        urls: List of competition URLs to scrape.
+
+    Returns:
+        Dict with details list, scrape_date, and errors.
+    """
+    details = []
+    errors = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
+
+        for url in urls:
+            try:
+                print(f"Fetching: {url}", file=sys.stderr)
+                page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(2000)  # Allow content to render
+
+                # Route to appropriate extractor
+                if "netrewards.com.au" in url:
+                    result = extract_netrewards_detail(page, url)
+                else:
+                    result = extract_competitions_com_au_detail(page, url)
+
+                details.append(result)
+            except Exception as e:
+                errors.append({"url": url, "error": str(e)})
+                print(f"  Error: {e}", file=sys.stderr)
+
+        browser.close()
+
+    print(f"Fetched {len(details)} details, {len(errors)} errors", file=sys.stderr)
+
+    return {
+        "details": details,
+        "scrape_date": date.today().isoformat(),
+        "errors": errors,
+    }
+
+
 def scrape_urls() -> dict:
     """Just get competition URLs from listing pages (for debugging).
 
@@ -772,7 +825,7 @@ def scrape_urls() -> dict:
 def main():
     """Entry point - outputs JSON to stdout."""
     if len(sys.argv) < 2:
-        print("Usage: python scraper.py [listings|detail URL|urls]", file=sys.stderr)
+        print("Usage: python scraper.py [listings|detail URL|details-batch|urls]", file=sys.stderr)
         sys.exit(1)
 
     command = sys.argv[1]
@@ -789,13 +842,27 @@ def main():
         result = scrape_detail(url)
         print(json.dumps(result, indent=2))
 
+    elif command == "details-batch":
+        # Read URLs from stdin as JSON: {"urls": ["url1", "url2", ...]}
+        try:
+            input_data = json.loads(sys.stdin.read())
+            urls = input_data.get("urls", [])
+            if not urls:
+                print("No URLs provided. Expected JSON: {\"urls\": [...]}", file=sys.stderr)
+                sys.exit(1)
+            result = scrape_details_batch(urls)
+            print(json.dumps(result, indent=2))
+        except json.JSONDecodeError as e:
+            print(f"Invalid JSON input: {e}", file=sys.stderr)
+            sys.exit(1)
+
     elif command == "urls":
         result = scrape_urls()
         print(json.dumps(result, indent=2))
 
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
-        print("Usage: python scraper.py [listings|detail URL|urls]", file=sys.stderr)
+        print("Usage: python scraper.py [listings|detail URL|details-batch|urls]", file=sys.stderr)
         sys.exit(1)
 
 

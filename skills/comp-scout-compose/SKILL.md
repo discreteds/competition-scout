@@ -26,6 +26,49 @@ Generate authentic, memorable "25 words or less" competition entries and **autom
 
 ## Workflow
 
+### Step 0: Check for Matching Saved Stories
+
+Before asking for new context, check if saved stories from the data repo match this competition.
+
+1. Fetch saved stories from the data repo's CLAUDE.md:
+```bash
+gh api repos/$TARGET_REPO/contents/CLAUDE.md -H "Accept: application/vnd.github.raw" 2>/dev/null
+```
+
+2. Parse the Saved Stories section for story entries
+
+3. For each story, calculate relevance by matching story keywords against:
+   - Competition prompt
+   - Brand/sponsor name
+   - Prize description
+   - Strategy themes (if available from comp-scout-analyze)
+
+4. If matching stories found, present them:
+```
+I found saved stories that might work for this competition:
+
+1. **Opa's German Christmas** (3 keyword matches: christmas, chocolate, family)
+   Theme: Nostalgia, heritage, German traditions
+
+2. **Teaching Daughter to Cook** (1 keyword match: kitchen)
+   Theme: Family moments, passing on traditions
+
+Would you like to use one of these, or provide new context?
+```
+
+5. If user selects a story, use its details for entry composition (skip Step 1)
+
+6. If user provides new context AND it's rich enough to reuse, offer to save:
+```
+That's great context! Would you like me to save this as a story for future competitions?
+
+Suggested name: "Sunday BBQ Traditions"
+Themes: barbecue, summer, Australian lifestyle
+Keywords: bbq, summer, meat, outdoor, gathering
+```
+
+To save a new story, update the data repo's CLAUDE.md with the new story entry.
+
 ### Step 1: Gather User Context
 
 Before drafting, ask clarifying questions:
