@@ -1,1 +1,14 @@
+# Secrets
+.env
+
+# User-specific config
 .hiivmind/github/user.yaml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# IDE
+.idea/
+.vscode/
