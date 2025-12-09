@@ -1,0 +1,31 @@
+{
+  "name": "competition-scout",
+  "owner": {
+    "name": "discreteds"
+  },
+  "repository": "https://github.com/discreteds/competition-scout",
+  "metadata": {
+    "description": "Online 25-word-or-less competition scouting skills - Scrape, analyze, compose entries, persist to GitHub. For '25 words or less' style competitions.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "competition-scout",
+      "source": "./",
+      "description": "Skills for competition scouting: comp-scout-scrape (Playwright + LLM interpretation), comp-scout-analyze (strategy with tone matrix), comp-scout-compose (entry generation with arc patterns), comp-scout-persist (GitHub issues with deduplication). Targets Australian competition sites.",
+      "version": "1.0.0",
+      "keywords": [
+        "competitions",
+        "25-words-or-less",
+        "scraping",
+        "strategy",
+        "entries",
+        "github",
+        "australia",
+        "playwright",
+        "creative-writing",
+        "tone-analysis"
+      ]
+    }
+  ]
+}

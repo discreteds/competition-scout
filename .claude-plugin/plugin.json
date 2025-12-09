@@ -1,0 +1,25 @@
+{
+  "name": "competition-scout",
+  "description": "Competition scouting skills for Claude Code - Scrape '25 words or less' competitions, analyze strategy, compose entries, and persist to GitHub. LLM-enhanced scraping extracts draw dates and prompts that regex can't. Simplified GitHub persistence with issues as dumping grounds.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Nathaniel Ramm"
+  },
+  "keywords": [
+    "competitions",
+    "25-words-or-less",
+    "scraping",
+    "playwright",
+    "strategy",
+    "entries",
+    "copywriting",
+    "github-issues",
+    "project-management",
+    "australia",
+    "competitions.com.au",
+    "netrewards",
+    "tone-analysis",
+    "creative-writing"
+  ],
+  "repository": "https://github.com/discreteds/competition-scout"
+}
