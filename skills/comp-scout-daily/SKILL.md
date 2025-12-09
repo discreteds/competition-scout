@@ -19,15 +19,18 @@ When this skill is invoked:
 
 If you find yourself about to ask a question, STOP and use the default behavior instead.
 
-## CRITICAL: Persist Everything - No Filtering
+## CRITICAL: Persist Everything the Scraper Returns
 
-**"25WOL" is a category name, NOT a filter criterion.**
+**"25WOL" is a category name for creative writing competitions, NOT a word-count filter.**
 
-- **Persist ALL competitions** from the scraped pages
-- Do NOT filter by word limit (25, 50, 100 words - all are valid)
-- Do NOT filter by competition type (lotteries are fine to track)
+The Python scraper already filters:
+- ✅ Sponsored/lottery ads (purchase-required, via CSS class detection)
+- ✅ Non-creative-writing competitions (checks for "words or less" text)
+
+**YOU must NOT add additional filters:**
+- Do NOT filter by word limit (25, 50, 100 words - all are valid creative writing comps)
 - Do NOT filter by prize type or value
-- The source URLs are already curated - your job is to persist what's there
+- If the scraper returns it, PERSIST IT
 
 **Auto-tagging (for-kids, cruise) is for LABELING, not skipping:**
 - Tagged competitions ARE STILL CREATED as issues

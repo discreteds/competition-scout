@@ -7,14 +7,18 @@ description: Scrape competition websites, extract structured data, and auto-pers
 
 Scrape creative writing competitions from Australian aggregator sites and **automatically persist to GitHub**.
 
-## CRITICAL: Persist Everything
+## CRITICAL: Persist Everything the Scraper Returns
 
-**"25WOL" is a category name for creative writing competitions, NOT a filter.**
+**"25WOL" is a category name for creative writing competitions, NOT a word-count filter.**
 
-- Persist ALL competitions from the scraped pages, regardless of word limit (25, 50, 100 words - all valid)
-- The source URLs are already filtered to this competition style
-- Your job is to scrape and persist, NOT to filter or exclude
-- Do NOT skip competitions because of word count, prize type, or other criteria
+The Python scraper (`scraper.py`) already filters out:
+- ✅ Sponsored/lottery ads (purchase-required, detected via `/exit/` links in CSS)
+- ✅ Non-creative-writing competitions (must contain "words or less" text)
+
+**YOU must NOT add additional filters:**
+- Do NOT filter by word limit (25, 50, 100 words - all are valid creative writing comps)
+- Do NOT filter by prize type or value
+- If the scraper returns it, PERSIST IT as an issue
 
 ## What This Skill Does
 
