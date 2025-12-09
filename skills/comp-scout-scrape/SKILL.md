@@ -1,22 +1,20 @@
 ---
 name: comp-scout-scrape
-description: Scrape competition websites and extract structured data using LLM interpretation. Handles competitions.com.au and netrewards.com.au.
+description: Scrape competition websites and extract structured data. Returns JSON with all competition fields extracted - no HTML interpretation needed.
 ---
 
 # Competition Scraper
 
-Scrape "25 words or less" competitions from Australian aggregator sites with LLM-enhanced interpretation.
+Scrape "25 words or less" competitions from Australian aggregator sites.
 
-## Two-Phase Approach
+## What's Changed
 
-1. **Python/Playwright** - Fetches raw HTML from JS-rendered pages
-2. **Claude interpretation** - Extracts structured data using natural language understanding
-
-This is better than regex-based scraping because Claude can:
-- Understand varied date formats ("closes Dec 31" vs "31/12/2024" vs "in 7 days")
-- Extract draw date and winner notification date from unstructured text
-- Identify the actual prompt even when buried in marketing copy
-- Determine brand from context clues
+The scraper now returns **structured JSON** with all fields extracted. Claude no longer needs to interpret raw HTML - the Python extraction handles:
+- Date parsing (multiple formats)
+- Word limit extraction
+- Prompt identification
+- Winner notification from JSON-LD
+- Title normalization for deduplication
 
 ## Prerequisites
 
@@ -27,131 +25,178 @@ playwright install chromium
 
 ## Workflow
 
-### Step 1: Fetch Listing Pages
+### Step 1: Scrape Listings
 
-Run the scraper to get HTML from all listing pages:
+Run the scraper to get structured competition data from all sites:
 
 ```bash
 python skills/comp-scout-scrape/scraper.py listings
 ```
 
-This returns JSON with HTML content from:
-- competitions.com.au
-- netrewards.com.au
+**Output:**
+```json
+{
+  "competitions": [
+    {
+      "url": "https://competitions.com.au/win-example/",
+      "site": "competitions.com.au",
+      "title": "Win a $500 Gift Card",
+      "normalized_title": "500 gift card",
+      "brand": "Example Brand",
+      "prize_summary": "$500",
+      "prize_value": 500,
+      "closing_date": "2024-12-31"
+    }
+  ],
+  "scrape_date": "2024-12-09",
+  "errors": []
+}
+```
 
-### Step 2: Interpret Listings
+Progress is logged to stderr. JSON output goes to stdout.
 
-From the HTML, identify each competition and extract:
+### Step 2: Review Results
 
-| Field | Look For |
-|-------|----------|
-| url | Link to competition detail page |
-| title | Competition title/heading |
-| prize_summary | Prize badge, "Win a...", prize value |
-| closing_date | "Closes:", date badges, countdown timers |
+Present the competitions to the user:
 
-**Present summary to user:** "Found X competitions from competitions.com.au, Y from netrewards.com.au"
+```
+Found 15 competitions:
+- competitions.com.au: 10 competitions
+- netrewards.com.au: 5 competitions
 
-### Step 3: Check for New Competitions
+After deduplication: 12 unique competitions
+```
 
-Before fetching details, check which competitions are new:
-- Compare URLs against existing issues in target repo
-- Only fetch details for competitions not already tracked
+### Step 3: Fetch Details (for new competitions)
 
-### Step 4: Fetch Detail Pages
-
-For each new competition, fetch the full page:
+For competitions that need full details (prompt, word limit, winner notification):
 
 ```bash
 python skills/comp-scout-scrape/scraper.py detail "https://competitions.com.au/win-example/"
 ```
 
-### Step 5: Interpret Detail Page
-
-From the page content, extract all fields:
-
-| Field | Look For |
-|-------|----------|
-| title | Main heading, `<h1>`, og:title meta tag |
-| brand | Logo alt text, "brought to you by", sponsor mentions, footer |
-| prize_summary | Prize description, "win a...", prize details section |
-| prize_value | $XX,XXX patterns, "valued at" |
-| prompt | "In 25 words or less...", "Tell us why...", "Complete this sentence...", entry question |
-| word_limit | "25 words", "50 words", "in X words or less" |
-| closing_date | "Closes:", "Entries close:", "Competition ends:" + date |
-| draw_date | "Winners drawn:", "Judging:", "Selection date:", "Draw date:" |
-| winners_notified_date | "Winners notified by:", "within X days of draw", "notified by email" |
-
-### Step 6: Output Structured Data
-
-Return JSON for each competition:
-
+**Output:**
 ```json
 {
   "url": "https://competitions.com.au/win-example/",
   "site": "competitions.com.au",
   "title": "Win a $500 Gift Card",
+  "normalized_title": "500 gift card",
   "brand": "Example Brand",
-  "prize_summary": "$500 gift card to spend at Example Store",
+  "prize_summary": "$500",
   "prize_value": 500,
-  "prompt": "Tell us in 25 words or less why you love shopping at Example Store",
+  "prompt": "Tell us in 25 words or less why you love shopping",
   "word_limit": 25,
   "closing_date": "2024-12-31",
-  "draw_date": "2025-01-07",
-  "winners_notified_date": "2025-01-14"
+  "entry_method": "Submit via form below",
+  "winner_notification": {
+    "notification_text": "Winners will be notified within 7 days",
+    "notification_date": null,
+    "notification_days": 7,
+    "selection_text": "Winners selected on 7 January 2025",
+    "selection_date": "2025-01-07"
+  },
+  "scraped_at": "2024-12-09T10:30:00"
 }
 ```
 
-## Date Extraction Tips
+### Step 4: Debug Mode (URLs only)
 
-Competition pages express dates in many formats. Look for:
+To just get competition URLs without full extraction:
 
-**Absolute dates:**
-- "31 December 2024"
-- "31/12/2024"
-- "Dec 31, 2024"
-- "2024-12-31"
+```bash
+python skills/comp-scout-scrape/scraper.py urls
+```
 
-**Relative dates (calculate from today or closing):**
-- "Closes in 7 days"
-- "Winners drawn 14 days after close"
-- "Notified within 28 days"
+**Output:**
+```json
+{
+  "competitions.com.au": [
+    "https://competitions.com.au/win-example-1/",
+    "https://competitions.com.au/win-example-2/"
+  ],
+  "netrewards.com.au": [
+    "https://netrewards.com.au/competitions/example/"
+  ]
+}
+```
 
-**Implicit dates:**
-- "Winners drawn the following week"
-- "Notified by email after judging"
+## Output Fields
 
-When dates are relative, calculate the actual date.
+### Listing Output
 
-## Handling Missing Data
+| Field | Type | Description |
+|-------|------|-------------|
+| url | string | Full URL to competition detail page |
+| site | string | Source site (competitions.com.au or netrewards.com.au) |
+| title | string | Competition title as displayed |
+| normalized_title | string | Lowercase, prefixes stripped, for matching |
+| brand | string | Sponsor/brand name (if available in listing) |
+| prize_summary | string | Prize description or value badge |
+| prize_value | int/null | Numeric value in dollars |
+| closing_date | string/null | YYYY-MM-DD format |
 
-Not all fields will be available on every page:
+### Detail Output
 
-| Field | If Missing |
-|-------|------------|
-| brand | Use site domain or "Unknown" |
-| prize_value | Leave as null |
-| draw_date | Leave as null |
-| winners_notified_date | Leave as null |
-| word_limit | Default to 25 |
+All listing fields plus:
 
-## Output Schema
+| Field | Type | Description |
+|-------|------|-------------|
+| prompt | string | The actual competition question/prompt |
+| word_limit | int | Maximum words (default 25) |
+| entry_method | string | How to submit entry |
+| winner_notification | object/null | Notification details from JSON-LD |
+| scraped_at | string | ISO timestamp of scrape |
 
-See `lib/schemas/competition.yaml` for the full schema definition.
+### Winner Notification Object
 
-```yaml
-competition:
-  url: string           # Required
-  site: string          # Required
-  title: string         # Required
-  brand: string         # Required (use "Unknown" if not found)
-  prize_summary: string # Required
-  prize_value: int      # Optional
-  prompt: string        # Required
-  word_limit: int       # Default 25
-  closing_date: date    # Required (YYYY-MM-DD)
-  draw_date: date       # Optional
-  winners_notified_date: date  # Optional
+Extracted from competitions.com.au JSON-LD FAQPage schema:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| notification_text | string | Raw notification text |
+| notification_date | string/null | Specific date if mentioned |
+| notification_days | int/null | Days after close/draw |
+| selection_text | string | How winners are selected |
+| selection_date | string/null | When judging occurs |
+
+## Title Normalization
+
+Titles are normalized for deduplication:
+
+1. Lowercase
+2. Strip prefixes: "Win ", "Win a ", "Win an ", "Win the ", "Win 1 of "
+3. Remove punctuation
+4. Collapse whitespace
+
+**Example:**
+```
+Original: "Win a $500 Coles Gift Card"
+Normalized: "500 coles gift card"
+```
+
+## Date Formats Supported
+
+The scraper parses these date formats:
+
+| Format | Example |
+|--------|---------|
+| Day Month Year | "31 December 2024", "31 Dec 2024" |
+| ISO | "2024-12-31" |
+| Slash | "31/12/2024" |
+| netrewards format | "31 12 25" (DD MM YY) |
+
+## Error Handling
+
+Errors are captured per-site and returned in the response:
+
+```json
+{
+  "competitions": [...],
+  "errors": [
+    {"site": "netrewards.com.au", "error": "Timeout after 60s"}
+  ]
+}
 ```
 
 ## Example Session
@@ -159,38 +204,40 @@ competition:
 ```
 User: Scrape competitions
 
-Claude: I'll fetch the listing pages from competitions.com.au and netrewards.com.au.
+Claude: I'll fetch competitions from both sites.
 
 [Runs: python skills/comp-scout-scrape/scraper.py listings]
 
-Found 15 competitions:
-- competitions.com.au: 10 competitions
-- netrewards.com.au: 5 competitions
+Found 12 unique competitions:
+- competitions.com.au: 8 competitions
+- netrewards.com.au: 4 competitions
 
 Checking against existing issues... 3 are new.
 
-Fetching details for new competitions...
-
-[Runs: python skills/comp-scout-scrape/scraper.py detail URL for each]
-
-Here are the 3 new competitions:
+**New Competitions:**
 
 1. **Win a $500 Coles Gift Card** (Coles)
-   - Prompt: "Tell us in 25 words or less what you'd buy..."
    - Closes: Dec 31, 2024
    - Prize: $500
 
 2. **Win a Trip to Bali** (Flight Centre)
-   - Prompt: "In 25 words or less, describe your dream holiday..."
    - Closes: Jan 15, 2025
-   - Prize: ~$5,000
+   - Prize: $5,000
 
 3. **Win a Year's Supply of Coffee** (Nespresso)
-   - Prompt: "Complete this sentence in 25 words or less: My morning coffee..."
    - Closes: Dec 20, 2024
    - Prize: $1,200
 
 Would you like me to:
-- Analyze any of these for strategy?
+- Get full details (prompts, word limits) for these?
 - Persist them to GitHub?
+- Generate entry strategies?
 ```
+
+## Integration
+
+The structured output integrates directly with other skills:
+
+- **comp-scout-persist**: Use `normalized_title` for deduplication, `closing_date` for milestones
+- **comp-scout-analyze**: Pass competition details for strategy generation
+- **comp-scout-compose**: Use `prompt` and `word_limit` for entry generation
