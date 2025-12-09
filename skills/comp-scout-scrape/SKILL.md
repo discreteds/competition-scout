@@ -1,20 +1,21 @@
 ---
 name: comp-scout-scrape
-description: Scrape competition websites and extract structured data. Returns JSON with all competition fields extracted - no HTML interpretation needed.
+description: Scrape competition websites, extract structured data, and auto-persist to GitHub issues. Creates issues for new competitions, adds comments for duplicates.
 ---
 
 # Competition Scraper
 
-Scrape "25 words or less" competitions from Australian aggregator sites.
+Scrape "25 words or less" competitions from Australian aggregator sites and **automatically persist to GitHub**.
 
-## What's Changed
+## What This Skill Does
 
-The scraper now returns **structured JSON** with all fields extracted. Claude no longer needs to interpret raw HTML - the Python extraction handles:
-- Date parsing (multiple formats)
-- Word limit extraction
-- Prompt identification
-- Winner notification from JSON-LD
-- Title normalization for deduplication
+1. Scrapes competitions.com.au and netrewards.com.au
+2. Extracts structured data (dates, prompts, prizes)
+3. Checks for duplicates against existing GitHub issues
+4. Creates issues for new competitions
+5. Adds comments for duplicates found on other sites
+
+**No manual "please persist" step required.**
 
 ## Prerequisites
 
@@ -23,11 +24,27 @@ pip install playwright
 playwright install chromium
 ```
 
+Also requires:
+- `gh` CLI authenticated
+- Target repository for competition data (not this skills repo)
+
 ## Workflow
 
-### Step 1: Scrape Listings
+### Step 1: Determine Target Repository
 
-Run the scraper to get structured competition data from all sites:
+The target repo stores competition issues. Specify or get from config:
+
+```bash
+# From workspace config (if hiivmind-pulse-gh initialized)
+TARGET_REPO=$(yq '.repositories[0].full_name' .hiivmind/github/config.yaml 2>/dev/null)
+
+# Or use default/specified
+TARGET_REPO="${TARGET_REPO:-discreteds/competition-data}"
+```
+
+### Step 2: Scrape Listings
+
+Run the scraper to get structured competition data:
 
 ```bash
 python skills/comp-scout-scrape/scraper.py listings
@@ -53,72 +70,98 @@ python skills/comp-scout-scrape/scraper.py listings
 }
 ```
 
-Progress is logged to stderr. JSON output goes to stdout.
+### Step 3: Check for Existing Issues
 
-### Step 2: Review Results
+For each scraped competition, check if it already exists:
 
-Present the competitions to the user:
-
+```bash
+# Get all open competition issues
+gh issue list -R "$TARGET_REPO" \
+  --label "competition" \
+  --state open \
+  --json number,title,body \
+  --limit 200
 ```
-Found 15 competitions:
-- competitions.com.au: 10 competitions
-- netrewards.com.au: 5 competitions
 
-After deduplication: 12 unique competitions
-```
+**Match by:**
+1. URL in issue body (exact match = definite duplicate)
+2. Normalized title similarity (>80% = likely duplicate)
 
-### Step 3: Fetch Details (for new competitions)
+### Step 4: Fetch Details for New Competitions
 
-For competitions that need full details (prompt, word limit, winner notification):
+For competitions not already tracked, get full details:
 
 ```bash
 python skills/comp-scout-scrape/scraper.py detail "https://competitions.com.au/win-example/"
 ```
 
-**Output:**
-```json
-{
-  "url": "https://competitions.com.au/win-example/",
-  "site": "competitions.com.au",
-  "title": "Win a $500 Gift Card",
-  "normalized_title": "500 gift card",
-  "brand": "Example Brand",
-  "prize_summary": "$500",
-  "prize_value": 500,
-  "prompt": "Tell us in 25 words or less why you love shopping",
-  "word_limit": 25,
-  "closing_date": "2024-12-31",
-  "entry_method": "Submit via form below",
-  "winner_notification": {
-    "notification_text": "Winners will be notified within 7 days",
-    "notification_date": null,
-    "notification_days": 7,
-    "selection_text": "Winners selected on 7 January 2025",
-    "selection_date": "2025-01-07"
-  },
-  "scraped_at": "2024-12-09T10:30:00"
-}
-```
+### Step 5: Auto-Persist Results
 
-### Step 4: Debug Mode (URLs only)
-
-To just get competition URLs without full extraction:
+#### For New Competitions → Create Issue
 
 ```bash
-python skills/comp-scout-scrape/scraper.py urls
+gh issue create -R "$TARGET_REPO" \
+  --title "$TITLE" \
+  --label "competition" \
+  --label "25wol" \
+  --body "$(cat <<'EOF'
+## Competition Details
+
+**URL:** {url}
+**Brand:** {brand}
+**Prize:** {prize_summary}
+**Word Limit:** {word_limit} words
+**Closes:** {closing_date}
+**Draw Date:** {draw_date}
+**Winners Notified:** {notification_info}
+
+## Prompt
+
+> {prompt}
+
+---
+*Scraped from {site} on {scrape_date}*
+EOF
+)"
 ```
 
-**Output:**
-```json
-{
-  "competitions.com.au": [
-    "https://competitions.com.au/win-example-1/",
-    "https://competitions.com.au/win-example-2/"
-  ],
-  "netrewards.com.au": [
-    "https://netrewards.com.au/competitions/example/"
-  ]
-}
+Then set milestone by closing month:
+```bash
+gh issue edit $ISSUE_NUMBER -R "$TARGET_REPO" --milestone "December 2024"
+```
+
+#### For Duplicates → Add Comment
+
+If competition URL found on another site:
+
+```bash
+gh issue comment $EXISTING_ISSUE -R "$TARGET_REPO" --body "$(cat <<'EOF'
+### Also found on {other_site}
+
+**URL:** {url}
+**Title on this site:** {title}
+*Discovered: {date}*
+EOF
+)"
+```
+
+### Step 6: Report Results
+
+Present confirmation to user:
+
+```
+✅ Scrape complete!
+
+**Created 3 new issues:**
+- #42: Win a $500 Coles Gift Card (closes Dec 31)
+- #43: Win a Trip to Bali (closes Jan 15)
+- #44: Win a Year's Supply of Coffee (closes Dec 20)
+
+**Found 2 duplicates (added as comments):**
+- #38: Win Woolworths Gift Cards (also on netrewards.com.au)
+- #39: Win Dreamworld Experience (also on netrewards.com.au)
+
+**Skipped 7 already tracked**
 ```
 
 ## Output Fields
@@ -131,7 +174,7 @@ python skills/comp-scout-scrape/scraper.py urls
 | site | string | Source site (competitions.com.au or netrewards.com.au) |
 | title | string | Competition title as displayed |
 | normalized_title | string | Lowercase, prefixes stripped, for matching |
-| brand | string | Sponsor/brand name (if available in listing) |
+| brand | string | Sponsor/brand name (if available) |
 | prize_summary | string | Prize description or value badge |
 | prize_value | int/null | Numeric value in dollars |
 | closing_date | string/null | YYYY-MM-DD format |
@@ -149,8 +192,6 @@ All listing fields plus:
 | scraped_at | string | ISO timestamp of scrape |
 
 ### Winner Notification Object
-
-Extracted from competitions.com.au JSON-LD FAQPage schema:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -175,69 +216,61 @@ Original: "Win a $500 Coles Gift Card"
 Normalized: "500 coles gift card"
 ```
 
-## Date Formats Supported
-
-The scraper parses these date formats:
-
-| Format | Example |
-|--------|---------|
-| Day Month Year | "31 December 2024", "31 Dec 2024" |
-| ISO | "2024-12-31" |
-| Slash | "31/12/2024" |
-| netrewards format | "31 12 25" (DD MM YY) |
-
-## Error Handling
-
-Errors are captured per-site and returned in the response:
-
-```json
-{
-  "competitions": [...],
-  "errors": [
-    {"site": "netrewards.com.au", "error": "Timeout after 60s"}
-  ]
-}
-```
-
 ## Example Session
 
 ```
 User: Scrape competitions
 
-Claude: I'll fetch competitions from both sites.
+Claude: I'll scrape competitions and persist new ones to GitHub.
 
 [Runs: python skills/comp-scout-scrape/scraper.py listings]
 
-Found 12 unique competitions:
-- competitions.com.au: 8 competitions
-- netrewards.com.au: 4 competitions
+Found 12 competitions from both sites.
 
-Checking against existing issues... 3 are new.
+[Runs: gh issue list -R discreteds/competition-data --label competition --json number,title,body]
 
-**New Competitions:**
+Checking against 45 existing issues...
+- 3 are new
+- 2 are duplicates (same competition, different source)
+- 7 already tracked
 
-1. **Win a $500 Coles Gift Card** (Coles)
-   - Closes: Dec 31, 2024
-   - Prize: $500
+Fetching details for 3 new competitions...
 
-2. **Win a Trip to Bali** (Flight Centre)
-   - Closes: Jan 15, 2025
-   - Prize: $5,000
+[Creates issues and adds comments]
 
-3. **Win a Year's Supply of Coffee** (Nespresso)
-   - Closes: Dec 20, 2024
-   - Prize: $1,200
+✅ Scrape complete!
 
-Would you like me to:
-- Get full details (prompts, word limits) for these?
-- Persist them to GitHub?
-- Generate entry strategies?
+**Created 3 new issues:**
+- #46: Win a $500 Coles Gift Card (closes Dec 31)
+  - Milestone: December 2024
+- #47: Win a Trip to Bali (closes Jan 15)
+  - Milestone: January 2025
+- #48: Win a Year's Supply of Coffee (closes Dec 20)
+  - Milestone: December 2024
+
+**Added 2 duplicate comments:**
+- #38: Also found on netrewards.com.au
+- #39: Also found on netrewards.com.au
+
+Would you like me to analyze any of these for entry strategy?
+```
+
+## CLI Commands Reference
+
+```bash
+# Scrape all listing pages
+python skills/comp-scout-scrape/scraper.py listings
+
+# Get full details for one competition
+python skills/comp-scout-scrape/scraper.py detail "URL"
+
+# Debug: just get URLs
+python skills/comp-scout-scrape/scraper.py urls
 ```
 
 ## Integration
 
-The structured output integrates directly with other skills:
-
-- **comp-scout-persist**: Use `normalized_title` for deduplication, `closing_date` for milestones
-- **comp-scout-analyze**: Pass competition details for strategy generation
-- **comp-scout-compose**: Use `prompt` and `word_limit` for entry generation
+After scraping, you can:
+- Use **comp-scout-analyze** to generate entry strategies
+- Use **comp-scout-compose** to write actual entries
+- Both will auto-persist their results to the issue

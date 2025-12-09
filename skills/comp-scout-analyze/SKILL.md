@@ -1,19 +1,29 @@
 ---
 name: comp-scout-analyze
-description: Generate strategic analysis for competition entries. Identifies winning tone, themes, and angles based on sponsor type and brand voice.
+description: Generate strategic analysis for competition entries and auto-persist to GitHub issue. Identifies winning tone, themes, and angles based on sponsor type and brand voice.
 ---
 
 # Competition Strategy Analyzer
 
-Generate strategic analysis for "25 words or less" competition entries.
+Generate strategic analysis for "25 words or less" competition entries and **automatically add to GitHub issue**.
+
+## What This Skill Does
+
+1. Analyzes the competition's brand, sponsor type, and prompt
+2. Determines winning tone and approach
+3. Generates angle ideas and themes
+4. **Auto-persists strategy as comment on the competition's GitHub issue**
+
+**No manual "please save to issue" step required.**
 
 ## Input
 
-Competition data from `comp-scout-scrape`:
+Competition data (from GitHub issue or `comp-scout-scrape`):
 - url, title, brand
 - prize_summary, prize_value
 - prompt, word_limit
 - closing_date
+- **issue_number** (for auto-persist)
 
 ## Workflow
 
@@ -127,11 +137,55 @@ Common pitfalls for this type of competition:
 | Retail/general | "I want free stuff" energy |
 | Rural/agricultural | City-slicker posturing, romanticism |
 
+### Step 7: Auto-Persist to GitHub Issue
+
+Add strategy as a comment on the competition's issue:
+
+```bash
+gh issue comment $ISSUE_NUMBER -R "$TARGET_REPO" --body "$(cat <<'EOF'
+## Strategy Analysis
+
+**Sponsor Category:** {sponsor_category}
+**Brand Voice:** {brand_voice}
+**Recommended Tone:** {recommended_tone}
+
+### Approach
+{approach}
+
+### Themes to Use
+{themes_list}
+
+### Angle Ideas
+{angle_ideas_list}
+
+### Avoid
+{avoid_list}
+
+---
+*Generated: {date}*
+EOF
+)"
+```
+
+### Step 8: Report Completion
+
+```
+✅ Strategy analysis complete and saved to issue #42!
+
+**Summary:**
+- Sponsor Category: Food/beverage
+- Recommended Tone: Relatable with sensory details
+- Generated 5 angle ideas
+
+Ready to compose entries? Just ask!
+```
+
 ## Output Format
 
 ```yaml
 strategy:
   competition_url: "https://..."
+  issue_number: 42
   brand: "Example Brand"
   brand_voice: "Casual and friendly, emphasizes family moments"
   sponsor_category: "food/beverage"
@@ -168,14 +222,14 @@ strategy:
 ## Example Session
 
 ```
-User: Analyze this competition for strategy
+User: Analyze issue #42 for strategy
 
-Competition:
-- Brand: Nespresso
-- Prompt: "Complete this sentence in 25 words or less: My morning coffee..."
-- Prize: Year's supply of coffee ($1,200)
+Claude: I'll analyze this competition and save the strategy to the issue.
 
-Claude:
+[Reads issue #42 details]
+
+Competition: Win a Year's Supply of Coffee (Nespresso)
+Prompt: "Complete this sentence in 25 words or less: My morning coffee..."
 
 ## Strategy Analysis: Nespresso Competition
 
@@ -189,8 +243,7 @@ suggest self-aware humour is welcome.
 The "morning coffee" framing invites ritual/routine angles.
 
 **What they're really asking:** What specific, personal moment makes your
-morning coffee ritual special? They want to see themselves as part of
-meaningful moments, not just caffeine delivery.
+morning coffee ritual special?
 
 **Themes to use:**
 - Morning rituals and routines
@@ -198,37 +251,29 @@ meaningful moments, not just caffeine delivery.
 - The pause before chaos begins
 - Small luxuries
 
-**Words to consider:**
-- ritual, moment, pause, before
-- aroma, warmth, first
-- finally, only, mine
-
 **Angle ideas:**
 
 1. **The Pause** - Focus on the quiet moment before the day begins
-   "...is the only five minutes that's truly mine before the school run chaos begins."
-
 2. **Sensory Detail** - Zero in on one specific sensation
-   "...starts when the aroma reaches the bedroom. By the time I reach the kitchen, I'm already half-awake."
-
 3. **Self-Deprecating** - Admit to needing it more than you'd like
-   "...is non-negotiable. I've tried being a morning person without it. My family has asked me to stop trying."
-
 4. **The Ritual** - Describe the specific routine
-   "...follows the same steps every day. Capsule, cup, first sip by the window. Then, and only then, I speak."
-
 5. **Unexpected Angle** - Subvert the "morning" framing
-   "...sometimes happens at 3pm when I've earned a quiet moment and nobody's watching."
 
 **Avoid:**
 - "I need coffee to function" (overdone)
 - "Best coffee ever" (generic)
 - "I'm not a morning person" (cliché)
-- "Delicious" or taste descriptions without specificity
+
+[Runs: gh issue comment 42 --body "..."]
+
+✅ Strategy saved to issue #42!
+
+Ready to compose entries based on this strategy?
 ```
 
 ## Integration
 
-This skill outputs a `strategy` object that can be:
-1. Added as a comment on the competition's GitHub issue (via `comp-scout-persist`)
-2. Passed to `comp-scout-compose` to generate actual entries
+This skill:
+- Reads competition data from GitHub issues
+- Auto-saves strategy as comment
+- Outputs strategy for `comp-scout-compose` to use

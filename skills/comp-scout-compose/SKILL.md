@@ -1,17 +1,28 @@
 ---
 name: comp-scout-compose
-description: Generate authentic, memorable competition entries (25 words or less). Creates multiple variations with different arcs and tones, then refines based on feedback.
+description: Generate authentic, memorable competition entries (25 words or less) and auto-persist to GitHub issue. Creates multiple variations with different arcs and tones.
 ---
 
 # Competition Entry Composer
 
-Generate authentic, memorable "25 words or less" competition entries.
+Generate authentic, memorable "25 words or less" competition entries and **automatically save to GitHub issue**.
+
+## What This Skill Does
+
+1. Gathers user context to find authentic angles
+2. Generates 3-5 entry variations with different arcs
+3. Rates and recommends the strongest entries
+4. **Auto-persists entries as comment on GitHub issue**
+5. **Adds `entry-drafted` label to the issue**
+
+**No manual "please save entries" step required.**
 
 ## Input
 
 - Strategy from `comp-scout-analyze` (recommended)
 - OR competition details (prompt, word_limit, brand)
 - User context (personal connection, preferences)
+- **issue_number** (for auto-persist)
 
 ## Workflow
 
@@ -133,36 +144,6 @@ For each entry, provide:
 - Landing strength (1-5)
 - Notes on why it works
 
-**Example output:**
-
-```
-## Entry Variations
-
-### 1. Self-Deprecating (24 words) ⭐⭐⭐⭐
-"Every summer barbecue I'm the one who forgot to refill ice trays.
-This year, I finally become the prepared host. Gas bottle pending."
-
-Arc: Self-deprecating confession → resolution → undercut
-Landing: 4/5 - "Gas bottle pending" callback adds personality
-
-### 2. Sincere (23 words) ⭐⭐⭐⭐⭐
-"Summer entertaining means hauling bags of servo ice in 40-degree heat.
-My dignity melts faster than the ice. This would change everything."
-
-Arc: Problem → consequence → resolution
-Landing: 5/5 - "dignity melts" is memorable and specific
-
-### 3. Comedic (25 words) ⭐⭐⭐
-"I've mastered pavlova, perfected my burger technique, and memorised everyone's
-drink orders. Yet 'did anyone refill the ice?' remains my nemesis."
-
-Arc: List credentials → pivot to weakness
-Landing: 3/5 - Solid but "nemesis" feels slightly forced
-
-**Recommendation:** Entry #2 - strongest landing, relatable specificity,
-good word economy.
-```
-
 ### Step 5: Refine Based on Feedback
 
 After user selects a direction:
@@ -200,6 +181,61 @@ Before delivering final entry:
 - [ ] No repeated words doing the same job
 - [ ] No clichés or overused phrases
 - [ ] Would make a judge smile or nod
+
+### Step 7: Auto-Persist to GitHub Issue
+
+Add entries as comment and add label:
+
+```bash
+# Add entry drafts as comment
+gh issue comment $ISSUE_NUMBER -R "$TARGET_REPO" --body "$(cat <<'EOF'
+## Entry Drafts
+
+### Option 1 ({word_count} words) ⭐⭐⭐⭐⭐
+> {entry_text}
+
+Arc: {arc_type}
+Notes: {notes}
+
+### Option 2 ({word_count} words) ⭐⭐⭐⭐
+> {entry_text}
+
+Arc: {arc_type}
+Notes: {notes}
+
+### Option 3 ({word_count} words) ⭐⭐⭐
+> {entry_text}
+
+Arc: {arc_type}
+Notes: {notes}
+
+**Recommendation:** Option {n} - {reason}
+
+---
+*Generated: {date}*
+EOF
+)"
+
+# Add label to indicate entries are drafted
+gh issue edit $ISSUE_NUMBER -R "$TARGET_REPO" --add-label "entry-drafted"
+```
+
+### Step 8: Report Completion
+
+```
+✅ Entries saved to issue #42!
+
+**3 entry options drafted:**
+- Option 1 (24 words) ⭐⭐⭐⭐⭐ - Self-deprecating list
+- Option 2 (25 words) ⭐⭐⭐⭐ - Confession
+- Option 3 (23 words) ⭐⭐⭐ - Practical humour
+
+**Recommendation:** Option 1
+
+**Label added:** `entry-drafted`
+
+Ready to submit? Let me know which option you choose!
+```
 
 ## Anti-Patterns to Avoid
 
@@ -269,64 +305,73 @@ entries:
 
 recommendation: 1  # 0-indexed
 recommendation_reason: "Best balance of specificity, personality, and strong landing"
+issue_number: 42
+persisted: true
 ```
 
 ## Example Session
 
 ```
-User: Write entries for this competition
+User: Write entries for issue #42
 
-Competition:
-- Brand: Coles
-- Prompt: "Tell us in 25 words or less what you'd buy with a $500 gift card"
-- Word limit: 25
+Claude: I'll write entries for this competition.
 
-Claude: I'll help you write entries for the Coles gift card competition.
+[Reads issue #42]
+
+Competition: Win a $500 Coles Gift Card
+Prompt: "Tell us in 25 words or less what you'd buy"
 
 First, a few questions to find your authentic angle:
 
-1. What do you typically buy at Coles? (groceries, specific products, household items)
-2. Any specific situation where $500 would help? (hosting, family, specific need)
+1. What do you typically buy at Coles?
+2. Any specific situation where $500 would help?
 3. Tone preference: practical/sincere or humorous?
 
 User: We do our weekly shop there. Always buying for the kids. Would love to
 just buy nice things for once instead of bulk snacks and school lunch stuff.
 
 Claude: That's a great angle - the "finally treating yourself" vs endless kid supplies.
-Here are some variations:
 
-## Entry Variations
+## Entry Drafts
 
-### 1. Self-Deprecating List (24 words) ⭐⭐⭐⭐⭐
-"Tiny teddies. Zooper doopers. Le Snaks. Cheese stringers. For once, I'd
-fill a trolley with things that aren't in a lunchbox."
+### Option 1: Self-Deprecating List (24 words) ⭐⭐⭐⭐⭐
+> "Tiny teddies. Zooper doopers. Le Snaks. Cheese stringers. For once, I'd
+> fill a trolley with things that aren't in a lunchbox."
 
 Arc: List of kid stuff → pivot to self
 Landing: 5/5 - "aren't in a lunchbox" is specific and relatable
 
-### 2. Confession (25 words) ⭐⭐⭐⭐
-"I know every lunchbox snack by heart but forgot what cheese I actually
-like. Five hundred dollars of rediscovering my own taste buds."
+### Option 2: Confession (25 words) ⭐⭐⭐⭐
+> "I know every lunchbox snack by heart but forgot what cheese I actually
+> like. Five hundred dollars of rediscovering my own taste buds."
 
 Arc: Confession → resolution
 Landing: 4/5 - "own taste buds" works but slightly abstract
 
-### 3. Practical Humour (23 words) ⭐⭐⭐
-"School lunches sorted for a term. Then with whatever's left—maybe
-$4.50—something from the fancy cheese section. Just for me."
+### Option 3: Practical Humour (23 words) ⭐⭐⭐
+> "School lunches sorted for a term. Then with whatever's left—maybe
+> $4.50—something from the fancy cheese section. Just for me."
 
 Arc: Practical → undercut → treat
 Landing: 3/5 - Good but "$4.50" joke might not land for everyone
 
-**Recommendation:** Entry #1 - The specific snack names are immediately
+**Recommendation:** Option 1 - The specific snack names are immediately
 recognisable to any parent, and the landing is both relatable and punchy.
 
-Want me to refine any of these, or try a different angle?
+[Runs: gh issue comment 42 --body "..."]
+[Runs: gh issue edit 42 --add-label "entry-drafted"]
+
+✅ Entries saved to issue #42!
+- Added 3 entry options as comment
+- Added `entry-drafted` label
+
+Which option do you want to submit?
 ```
 
 ## Integration
 
-Entries can be:
-1. Added as a comment on the competition's GitHub issue
-2. Refined through multiple iterations
-3. Tracked with status labels (entry-drafted, entry-submitted)
+This skill:
+- Uses strategy from `comp-scout-analyze` (optional but recommended)
+- Auto-saves entries to GitHub issue
+- Adds `entry-drafted` label for tracking
+- Can be followed by submission confirmation (add `entry-submitted` label)
