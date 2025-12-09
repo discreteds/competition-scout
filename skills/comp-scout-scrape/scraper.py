@@ -14,10 +14,43 @@ Batch details example:
 """
 
 import json
+import random
 import re
 import sys
 from datetime import date, datetime
-from playwright.sync_api import sync_playwright, Page
+from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeout
+
+# =============================================================================
+# Configuration - All timeouts in milliseconds
+# =============================================================================
+
+# Page load timeout
+PAGE_LOAD_TIMEOUT_MS = 60000  # 60 seconds
+
+# Selector wait timeout (increased from 30s to handle slow JS rendering)
+SELECTOR_TIMEOUT_MS = 60000  # 60 seconds
+
+# Content render wait (after page load, before extraction)
+CONTENT_RENDER_WAIT_MS = 2000  # 2 seconds
+
+# Rate limiting - delay between requests to avoid being blocked
+RATE_LIMIT_DELAY_MS = 1500  # 1.5 seconds between requests
+
+# Retry configuration
+MAX_RETRIES = 3  # Number of retry attempts
+RETRY_BASE_DELAY_MS = 5000  # Base delay for exponential backoff (5s, 10s, 20s)
+
+# Scroll configuration for lazy-loaded content
+SCROLL_COUNT = 3  # Number of times to scroll
+SCROLL_DELAY_MS = 1000  # Delay between scrolls
+
+# User agents for rotation (helps avoid bot detection)
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+]
 
 SITES = {
     "competitions.com.au": {
@@ -285,6 +318,76 @@ def extract_prize_value(prize_text: str) -> int | None:
         except ValueError:
             pass
     return None
+
+
+# =============================================================================
+# Retry and Navigation Helpers
+# =============================================================================
+
+def navigate_with_retry(
+    page: Page,
+    url: str,
+    wait_for_selector: str | None = None,
+    max_retries: int = MAX_RETRIES,
+) -> bool:
+    """Navigate to URL with exponential backoff retry on failure.
+
+    Args:
+        page: Playwright page instance.
+        url: URL to navigate to.
+        wait_for_selector: Optional CSS selector to wait for after page load.
+        max_retries: Maximum number of retry attempts.
+
+    Returns:
+        True if navigation succeeded, False otherwise.
+
+    Raises:
+        Exception: Re-raises the last exception if all retries fail.
+    """
+    last_error = None
+
+    for attempt in range(max_retries):
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=PAGE_LOAD_TIMEOUT_MS)
+
+            if wait_for_selector:
+                page.wait_for_selector(wait_for_selector, timeout=SELECTOR_TIMEOUT_MS)
+
+            return True
+
+        except (PlaywrightTimeout, Exception) as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                delay_ms = RETRY_BASE_DELAY_MS * (2 ** attempt)  # 5s, 10s, 20s
+                print(f"  Retry {attempt + 1}/{max_retries} after {delay_ms}ms: {e}", file=sys.stderr)
+                page.wait_for_timeout(delay_ms)
+            else:
+                print(f"  All {max_retries} attempts failed for {url}", file=sys.stderr)
+
+    if last_error:
+        raise last_error
+    return False
+
+
+def scroll_to_load_content(page: Page, scroll_count: int = SCROLL_COUNT) -> None:
+    """Scroll page to trigger lazy-loaded content.
+
+    Args:
+        page: Playwright page instance.
+        scroll_count: Number of times to scroll to bottom.
+    """
+    for _ in range(scroll_count):
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        page.wait_for_timeout(SCROLL_DELAY_MS)
+
+
+def get_random_user_agent() -> str:
+    """Get a random user agent string for bot detection avoidance.
+
+    Returns:
+        Random user agent string from the configured list.
+    """
+    return random.choice(USER_AGENTS)
 
 
 # =============================================================================
@@ -676,29 +779,31 @@ def extract_netrewards_detail(page: Page, url: str) -> dict:
 def scrape_listings() -> dict:
     """Scrape all listing pages and return structured competition data.
 
+    Uses retry logic with exponential backoff, rate limiting between sites,
+    and user agent rotation to avoid bot detection.
+
     Returns:
-        Dict with competitions list, scrape_date, and errors.
+        Dict with competitions list, scrape_date, errors, and partial flag.
     """
     all_competitions = []
     errors = []
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
+        context = browser.new_context(user_agent=get_random_user_agent())
         page = context.new_page()
 
         # Scrape competitions.com.au
         try:
             print("Scraping competitions.com.au...", file=sys.stderr)
-            page.goto(SITES["competitions.com.au"]["listing_url"], wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_selector(SITES["competitions.com.au"]["wait_for"], timeout=30000)
+            navigate_with_retry(
+                page,
+                SITES["competitions.com.au"]["listing_url"],
+                wait_for_selector=SITES["competitions.com.au"]["wait_for"],
+            )
 
             # Scroll to load more content
-            for _ in range(3):
-                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                page.wait_for_timeout(1000)
+            scroll_to_load_content(page)
 
             listings = extract_competitions_com_au_listings(page)
             all_competitions.extend(listings)
@@ -707,11 +812,20 @@ def scrape_listings() -> dict:
             errors.append({"site": "competitions.com.au", "error": str(e)})
             print(f"  Error: {e}", file=sys.stderr)
 
+        # Rate limit between sites
+        page.wait_for_timeout(RATE_LIMIT_DELAY_MS)
+
         # Scrape netrewards.com.au
         try:
             print("Scraping netrewards.com.au...", file=sys.stderr)
-            page.goto(SITES["netrewards.com.au"]["listing_url"], wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(2000)  # Let content load
+            navigate_with_retry(
+                page,
+                SITES["netrewards.com.au"]["listing_url"],
+                wait_for_selector=SITES["netrewards.com.au"]["wait_for"],
+            )
+
+            # Scroll to load lazy content (was missing before!)
+            scroll_to_load_content(page)
 
             listings = extract_netrewards_listings(page)
             all_competitions.extend(listings)
@@ -737,11 +851,14 @@ def scrape_listings() -> dict:
         "competitions": unique_competitions,
         "scrape_date": date.today().isoformat(),
         "errors": errors,
+        "partial": len(errors) > 0,  # Flag indicating some sites failed
     }
 
 
 def scrape_detail(url: str) -> dict:
     """Scrape a single competition detail page.
+
+    Uses retry logic with exponential backoff and user agent rotation.
 
     Args:
         url: URL of the competition page.
@@ -751,13 +868,11 @@ def scrape_detail(url: str) -> dict:
     """
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
+        context = browser.new_context(user_agent=get_random_user_agent())
         page = context.new_page()
 
-        page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(2000)  # Allow content to render
+        navigate_with_retry(page, url)
+        page.wait_for_timeout(CONTENT_RENDER_WAIT_MS)  # Allow content to render
 
         # Route to appropriate extractor
         if "netrewards.com.au" in url:
@@ -774,28 +889,28 @@ def scrape_details_batch(urls: list[str]) -> dict:
     """Scrape full details for multiple competition URLs.
 
     Reuses browser context for efficiency when fetching many pages.
+    Includes rate limiting between requests and retry logic to avoid
+    being blocked by anti-bot protection.
 
     Args:
         urls: List of competition URLs to scrape.
 
     Returns:
-        Dict with details list, scrape_date, and errors.
+        Dict with details list, scrape_date, errors, and partial flag.
     """
     details = []
     errors = []
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
+        context = browser.new_context(user_agent=get_random_user_agent())
         page = context.new_page()
 
-        for url in urls:
+        for i, url in enumerate(urls):
             try:
-                print(f"Fetching: {url}", file=sys.stderr)
-                page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(2000)  # Allow content to render
+                print(f"Fetching ({i+1}/{len(urls)}): {url}", file=sys.stderr)
+                navigate_with_retry(page, url)
+                page.wait_for_timeout(CONTENT_RENDER_WAIT_MS)  # Allow content to render
 
                 # Route to appropriate extractor
                 if "netrewards.com.au" in url:
@@ -804,9 +919,17 @@ def scrape_details_batch(urls: list[str]) -> dict:
                     result = extract_competitions_com_au_detail(page, url)
 
                 details.append(result)
+
+                # Rate limit between requests (critical fix!)
+                if i < len(urls) - 1:  # Don't delay after last request
+                    page.wait_for_timeout(RATE_LIMIT_DELAY_MS)
+
             except Exception as e:
                 errors.append({"url": url, "error": str(e)})
                 print(f"  Error: {e}", file=sys.stderr)
+                # Still rate limit even after errors
+                if i < len(urls) - 1:
+                    page.wait_for_timeout(RATE_LIMIT_DELAY_MS)
 
         browser.close()
 
@@ -816,11 +939,14 @@ def scrape_details_batch(urls: list[str]) -> dict:
         "details": details,
         "scrape_date": date.today().isoformat(),
         "errors": errors,
+        "partial": len(errors) > 0,  # Flag indicating some URLs failed
     }
 
 
 def scrape_urls() -> dict:
     """Just get competition URLs from listing pages (for debugging).
+
+    Uses retry logic and rate limiting between sites.
 
     Returns:
         Dict mapping site names to URL lists.
@@ -829,15 +955,19 @@ def scrape_urls() -> dict:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        )
+        context = browser.new_context(user_agent=get_random_user_agent())
         page = context.new_page()
 
-        for site_name, config in SITES.items():
+        site_names = list(SITES.keys())
+        for i, site_name in enumerate(site_names):
+            config = SITES[site_name]
             try:
-                page.goto(config["listing_url"], wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(2000)
+                navigate_with_retry(
+                    page,
+                    config["listing_url"],
+                    wait_for_selector=config["wait_for"],
+                )
+                scroll_to_load_content(page)
 
                 if site_name == "competitions.com.au":
                     listings = extract_competitions_com_au_listings(page)
@@ -845,6 +975,11 @@ def scrape_urls() -> dict:
                     listings = extract_netrewards_listings(page)
 
                 results[site_name] = [c["url"] for c in listings]
+
+                # Rate limit between sites
+                if i < len(site_names) - 1:
+                    page.wait_for_timeout(RATE_LIMIT_DELAY_MS)
+
             except Exception as e:
                 results[site_name] = {"error": str(e)}
 
