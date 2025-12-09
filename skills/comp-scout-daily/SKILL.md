@@ -7,6 +7,18 @@ description: End-to-end automated daily competition workflow. Orchestrates scrap
 
 Automated end-to-end workflow for cron/scheduled execution. **Orchestrates other skills** rather than duplicating their logic.
 
+## CRITICAL: Fully Unattended Operation
+
+**This skill MUST run completely unattended with NO user prompts.**
+
+When this skill is invoked:
+1. **DO NOT** ask "Would you like me to..." at any point
+2. **DO NOT** wait for user confirmation before persisting
+3. **DO NOT** ask permission to analyze or compose entries
+4. **JUST DO IT** - scrape, persist, analyze, compose, notify - all automatically
+
+If you find yourself about to ask a question, STOP and use the default behavior instead.
+
 ## What This Skill Does
 
 This skill is a **workflow orchestrator** that invokes other skills in sequence:
@@ -79,58 +91,49 @@ Parse from CLAUDE.md:
 - Saved stories for entry composition
 - Personal context (partner name, location)
 
-### Phase 2: Invoke comp-scout-scrape
+### Phase 2: Scrape AND Persist (Automatic)
 
-**Delegate to the scrape skill** - do not duplicate its logic.
+**Execute the scrape workflow directly** - no questions asked.
 
-The scrape skill handles:
-1. Scraping all listing pages
-2. Fetching full details for new competitions
-3. Checking for duplicates against existing issues
-4. Applying auto-filter rules
-5. Creating issues (or closing if filtered)
-6. Adding duplicate comments to existing issues
+YOU MUST:
+1. Run the scraper to get listings
+2. Check for duplicates against existing issues
+3. Fetch details for NEW competitions only
+4. **CREATE ISSUES IMMEDIATELY** for new competitions (no asking)
+5. Apply auto-filter rules (create + close filtered issues)
+6. Add duplicate comments to existing issues
+
+**DO NOT ask "Would you like me to persist these?" - JUST CREATE THE ISSUES.**
 
 ```
-Invoke: comp-scout-scrape
-Mode: Unattended (automatic)
 Output: List of new issue numbers created
 ```
 
-### Phase 3: Invoke comp-scout-analyze (for each new issue)
+### Phase 3: Analyze Each New Issue (Automatic)
 
-**Delegate to the analyze skill** with `--unattended` flag.
+**For each new, non-filtered issue: analyze strategy immediately.**
 
-For each new, non-filtered competition issue:
+YOU MUST:
+1. Read the issue details
+2. Determine sponsor category and brand voice
+3. Generate 5 angle ideas using default tone mapping
+4. **ADD STRATEGY COMMENT IMMEDIATELY** (no asking)
 
-```
-Invoke: comp-scout-analyze --unattended
-Input: Issue number from Phase 2
-Output: Strategy comment added to issue
-```
+**DO NOT ask "Would you like me to analyze?" - JUST DO IT.**
 
-The analyze skill in unattended mode:
-- Uses sponsor category to determine default tone
-- Generates 5 standard angle ideas
-- Auto-persists strategy as comment
+### Phase 4: Compose Entries for Each New Issue (Automatic)
 
-### Phase 4: Invoke comp-scout-compose (for each new issue)
+**For each new, non-filtered issue: compose entries immediately.**
 
-**Delegate to the compose skill** with `--unattended` flag.
+YOU MUST:
+1. Read the issue + strategy comment
+2. Load saved stories from target repo CLAUDE.md
+3. Match story keywords to competition (or use generic)
+4. Generate 3-5 entry variations with ratings
+5. **ADD ENTRIES COMMENT IMMEDIATELY** (no asking)
+6. **ADD entry-drafted LABEL** (no asking)
 
-For each new, non-filtered competition issue:
-
-```
-Invoke: comp-scout-compose --unattended
-Input: Issue number, strategy from Phase 3
-Output: Entry drafts comment added, entry-drafted label applied
-```
-
-The compose skill in unattended mode:
-- Matches saved stories from CLAUDE.md to competition
-- Uses best-matching story or generic approach
-- Generates 3-5 entry variations
-- Auto-persists with recommendation
+**DO NOT ask "Would you like me to compose entries?" - JUST DO IT.**
 
 ### Phase 5: Check Closing Soon
 

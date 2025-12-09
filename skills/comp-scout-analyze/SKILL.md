@@ -203,7 +203,7 @@ EOF
 - Recommended Tone: Relatable with sensory details
 - Generated 5 angle ideas
 
-Ready to compose entries? Just ask!
+(In interactive mode: "Ready to compose entries?")
 ```
 
 ## Output Format
@@ -293,9 +293,9 @@ morning coffee ritual special?
 [Runs: gh issue comment 42 --body "..."]
 
 ✅ Strategy saved to issue #42!
-
-Ready to compose entries based on this strategy?
 ```
+
+**Note:** When run in unattended mode (via comp-scout-daily), do NOT ask "Ready to compose entries?" - the workflow will automatically invoke compose next.
 
 ## Unattended Mode Details
 

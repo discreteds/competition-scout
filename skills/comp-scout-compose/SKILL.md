@@ -305,7 +305,7 @@ gh issue edit $ISSUE_NUMBER -R "$TARGET_REPO" --add-label "entry-drafted"
 
 **Label added:** `entry-drafted`
 
-Ready to submit? Let me know which option you choose!
+(In interactive mode: "Which option do you want to submit?")
 ```
 
 ## Anti-Patterns to Avoid
@@ -435,9 +435,9 @@ recognisable to any parent, and the landing is both relatable and punchy.
 ✅ Entries saved to issue #42!
 - Added 3 entry options as comment
 - Added `entry-drafted` label
-
-Which option do you want to submit?
 ```
+
+**Note:** When run in unattended mode (via comp-scout-daily), do NOT ask "Which option do you want to submit?" - the workflow will report all results at the end.
 
 ## Unattended Mode Details
 

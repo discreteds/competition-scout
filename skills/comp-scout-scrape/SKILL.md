@@ -223,6 +223,8 @@ Present confirmation to user:
 **Skipped 7 already tracked**
 ```
 
+**IMPORTANT:** Do NOT ask "Would you like me to analyze these?" at the end. When invoked by `comp-scout-daily`, the workflow will automatically invoke analyze/compose skills next. Report results and stop.
+
 ## Output Fields
 
 ### Listing Output
@@ -311,7 +313,6 @@ Fetching details for 3 new competitions...
 - #38: Also found on netrewards.com.au
 - #39: Also found on netrewards.com.au
 
-Would you like me to analyze any of these for entry strategy?
 ```
 
 ## CLI Commands Reference
