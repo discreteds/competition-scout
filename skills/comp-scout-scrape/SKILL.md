@@ -348,9 +348,88 @@ python skills/comp-scout-scrape/scraper.py urls
 }
 ```
 
+## Persistence Details
+
+This skill handles all GitHub persistence. The separate `comp-scout-persist` skill is **deprecated** - its functionality is merged here.
+
+### Issue Creation Template
+
+```markdown
+## Competition Details
+
+**URL:** {url}
+**Brand:** {brand}
+**Prize:** {prize_summary}
+**Word Limit:** {word_limit} words
+**Closes:** {closing_date}
+**Draw Date:** {draw_date}
+**Winners Notified:** {notification_info}
+
+## Prompt
+
+> {prompt}
+
+---
+*Scraped from {site} on {scrape_date}*
+```
+
+### Labels
+
+| Label | Description | Auto-applied |
+|-------|-------------|--------------|
+| `competition` | All competition issues | Always |
+| `25wol` | 25 words or less type | Always |
+| `for-kids` | Auto-filtered (kids competitions) | When keyword matches |
+| `cruise` | Auto-filtered (cruise competitions) | When keyword matches |
+| `closing-soon` | Closes within 3 days | By separate check |
+| `entry-drafted` | Entry has been composed | By comp-scout-compose |
+| `entry-submitted` | Entry has been submitted | Manually |
+
+### Milestones
+
+Issues are assigned to milestones by closing date month:
+- "December 2024"
+- "January 2025"
+- etc.
+
+```bash
+# Create milestone if needed
+gh api repos/$TARGET_REPO/milestones \
+  --method POST \
+  --field title="$MONTH_YEAR" \
+  --field due_on="$LAST_DAY_OF_MONTH"
+
+# Assign to issue
+gh issue edit $ISSUE_NUMBER -R "$TARGET_REPO" --milestone "$MONTH_YEAR"
+```
+
+### Duplicate Comment Template
+
+```markdown
+### Also found on {other_site}
+
+**URL:** {url}
+**Title on this site:** {title}
+*Discovered: {date}*
+```
+
+### Filtered Issue Handling
+
+When a competition matches filter keywords:
+1. Issue is created (for record-keeping)
+2. Filter label is applied (e.g., `for-kids`)
+3. Issue is immediately closed with explanation
+
+```bash
+gh issue close $ISSUE_NUMBER -R "$TARGET_REPO" \
+  --comment "Auto-filtered: matches '$KEYWORD' in $FILTER_RULE preferences."
+```
+
 ## Integration
+
+This skill is invoked by `comp-scout-daily` as the first step in the workflow.
 
 After scraping, you can:
 - Use **comp-scout-analyze** to generate entry strategies
 - Use **comp-scout-compose** to write actual entries
-- Both will auto-persist their results to the issue
+- Both will auto-persist their results as comments on the issue

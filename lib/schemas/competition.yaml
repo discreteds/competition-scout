@@ -3,87 +3,163 @@
 #
 # These schemas define the data structures passed between skills.
 # They are documentation/contracts - not enforced programmatically.
+#
+# ARCHITECTURE OVERVIEW:
+#
+#   comp-scout-scrape ──┬──> comp-scout-analyze ──> comp-scout-compose
+#                       │           │                      │
+#                       │           └──────────────────────┤
+#                       │                                  │
+#                       └──> [GitHub Issues] <─────────────┘
+#                                   │
+#                       comp-scout-notify (reads issues)
+#
+#   comp-scout-daily orchestrates: scrape -> analyze -> compose -> notify
+#
+# EXECUTION MODES:
+#   - Interactive (default): Skills ask clarifying questions
+#   - Unattended (--unattended): Skills use defaults, no prompts
+#
+# The daily skill ALWAYS runs in unattended mode.
 
 # =============================================================================
-# COMPETITION
+# COMPETITION (Listing)
 # =============================================================================
-# Output from comp-scout-scrape skill
-# Input to comp-scout-analyze and comp-scout-persist skills
+# Output from: scraper.py listings
+# Used by: duplicate checking, issue creation
 
-competition:
-  # Source information
+competition_listing:
   url: string                    # Full URL to competition page
   site: string                   # Source aggregator (competitions.com.au, netrewards.com.au)
-
-  # Basic details
   title: string                  # Competition title
+  normalized_title: string       # Lowercase, prefixes stripped (for dedup)
   brand: string                  # Sponsoring brand/company
-
-  # Prize information
   prize_summary: string          # Prize description text
   prize_value: int | null        # Dollar value if extractable
+  closing_date: date | null      # YYYY-MM-DD format
 
-  # Entry requirements
+# =============================================================================
+# COMPETITION (Detail)
+# =============================================================================
+# Output from: scraper.py detail URL
+# Used by: issue creation, strategy analysis
+
+competition_detail:
+  # All fields from competition_listing, plus:
   prompt: string                 # The question/prompt to answer
   word_limit: int                # Maximum words allowed (usually 25)
+  entry_method: string           # How to submit entry
+  winner_notification: object    # Notification details from JSON-LD (nullable)
+  scraped_at: string             # ISO timestamp of scrape
 
-  # Important dates
-  closing_date: date             # When entries close
-  draw_date: date | null         # When winners are drawn/judged
-  winners_notified_date: date | null  # When winners will be notified
+# =============================================================================
+# SCRAPE RESULT
+# =============================================================================
+# Output from: scraper.py listings
+
+scrape_result:
+  competitions: list[competition_listing]
+  scrape_date: date              # YYYY-MM-DD
+  errors: list[object]           # Any errors encountered
 
 # =============================================================================
 # STRATEGY
 # =============================================================================
-# Output from comp-scout-analyze skill
-# Input to comp-scout-compose skill
+# Output from: comp-scout-analyze skill
+# Input to: comp-scout-compose skill
 
 strategy:
   competition_url: string        # Reference to competition
+  issue_number: int | null       # GitHub issue number (if persisted)
 
   # Brand analysis
   brand: string                  # Brand name
   brand_voice: string            # How the brand communicates
-  sponsor_category: string       # wellness/tech/food/travel/retail/rural
+  sponsor_category: enum         # wellness | tech | food | travel | retail | rural
 
   # Entry recommendations
   recommended_tone: string       # e.g., "playful with genuine warmth"
   approach: string               # Strategic guidance paragraph
 
   # Creative direction
-  themes_to_use:                 # Key themes to incorporate
-    - string
-  words_to_consider:             # Specific words that might resonate
-    - string
-  angle_ideas:                   # 3-5 different approaches
-    - string                     # e.g., "Sincere: The Sunday morning ritual..."
+  themes_to_use: list[string]    # Key themes to incorporate
+  words_to_consider: list[string] # Specific words that might resonate
+  angle_ideas: list[string]      # 3-5 different approaches
 
   # Pitfalls
-  avoid:                         # Things to avoid
-    - string
+  avoid: list[string]            # Things to avoid
 
 # =============================================================================
 # ENTRY
 # =============================================================================
-# Output from comp-scout-compose skill
+# Output from: comp-scout-compose skill
 
 entry:
   text: string                   # The actual entry text
   word_count: int                # Must be <= word_limit
-  arc_type: string               # sincere, comedic_callback, self_deprecating, list_pivot
-  approach: string               # e.g., "warm", "punchy", "self-deprecating"
+  arc_type: enum                 # sincere | comedic | self_deprecating | list_pivot | sensory
+  approach: string               # Brief description of the strategy
   landing_strength: int          # 1-5 rating of final line impact
   notes: string                  # Why this entry works
+  story_used: string | null      # Name of saved story used (if any)
 
 # =============================================================================
 # ENTRY SET
 # =============================================================================
-# Full output from comp-scout-compose skill
+# Full output from: comp-scout-compose skill
 
 entry_set:
-  entries:
-    - entry                      # Array of entry objects
+  competition_url: string
+  issue_number: int | null       # GitHub issue number (if persisted)
+  entries: list[entry]
   recommendation: int            # Index of recommended entry (0-based)
+  recommendation_reason: string  # Why this entry is recommended
+
+# =============================================================================
+# WORKFLOW RESULT
+# =============================================================================
+# Output from: comp-scout-daily skill
+
+workflow_result:
+  run_date: date
+  target_repo: string
+
+  # Phase results
+  scrape:
+    total_found: int
+    by_site: object              # { "competitions.com.au": 5, "netrewards.com.au": 3 }
+    errors: list[string]
+
+  dedup:
+    new: int
+    duplicates: int              # Same comp on different site
+    already_tracked: int
+
+  filter:
+    passed: int
+    filtered: int
+    by_reason: object            # { "for-kids": 2, "cruise": 1 }
+
+  persist:
+    issues_created: list[int]    # Issue numbers
+    issues_closed: list[int]     # Filtered issues (created + closed)
+    comments_added: list[int]    # Duplicate comments added to existing issues
+
+  analyze:
+    completed: int
+    errors: list[string]
+
+  compose:
+    completed: int
+    errors: list[string]
+
+  notify:
+    sent: bool
+    recipients: list[string]
+    error: string | null
+
+  # Summary
+  competitions: list[object]     # Full details for report
 
 # =============================================================================
 # GITHUB ISSUE MAPPING
@@ -91,19 +167,65 @@ entry_set:
 # How competition data maps to GitHub issue fields
 
 github_issue:
-  title: string                  # "{brand}: {title}" or just "{title}"
-  body: string                   # Structured markdown (see comp-scout-persist SKILL.md)
+  title: string                  # Competition title (may include brand)
+  body: string                   # Structured markdown (see template below)
   labels:
     - competition                # Always applied
     - 25wol                      # 25 words or less type
     - closing-soon               # Auto-applied when < 3 days to close
     - entry-drafted              # Entry has been composed
     - entry-submitted            # Entry has been submitted
+    - for-kids                   # Auto-filter label
+    - cruise                     # Auto-filter label
   milestone: string              # By closing date month (e.g., "December 2024")
 
-  # Comments can contain:
-  # - Additional sources (duplicate competitions from other sites)
-  # - Strategy analysis
-  # - Draft entries
-  # - Submission confirmation
-  # - Winner notification
+# Issue body template:
+# ```markdown
+# ## Competition Details
+#
+# **URL:** {url}
+# **Brand:** {brand}
+# **Prize:** {prize_summary}
+# **Word Limit:** {word_limit} words
+# **Closes:** {closing_date}
+# **Draw Date:** {draw_date}
+# **Winners Notified:** {notification_info}
+#
+# ## Prompt
+#
+# > {prompt}
+#
+# ---
+# *Scraped from {site} on {scrape_date}*
+# ```
+
+# Comments contain:
+# - Additional sources (duplicate competitions from other sites)
+# - Strategy analysis (## Strategy Analysis)
+# - Draft entries (## Entry Drafts)
+# - Submission confirmation (## Entry Submitted)
+# - Winner notification (## Result)
+
+# =============================================================================
+# USER PREFERENCES
+# =============================================================================
+# Stored in target repo's CLAUDE.md
+
+user_preferences:
+  # Auto-filter rules
+  filters:
+    - label: string              # Label to apply (e.g., "for-kids")
+      keywords: list[string]     # Keywords to match
+
+  # Saved stories for entry composition
+  saved_stories:
+    - name: string               # Story identifier
+      theme: string              # Brief theme description
+      keywords: list[string]     # Keywords for matching
+      context: string            # The actual story/context
+
+  # Personal context
+  personal:
+    partner_name: string | null
+    location: string | null
+    interests: list[string]

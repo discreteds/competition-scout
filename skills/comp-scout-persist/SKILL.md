@@ -1,9 +1,23 @@
 ---
 name: comp-scout-persist
-description: Store competitions as GitHub issues with project integration. Handles deduplication, milestone assignment, and tracks all competition-related activity via comments.
+description: "[DEPRECATED] Persistence logic has been merged into comp-scout-scrape. This skill remains for reference only."
 ---
 
-# Competition Persistence
+# Competition Persistence (DEPRECATED)
+
+> **⚠️ This skill is deprecated.** Its functionality has been merged into `comp-scout-scrape`.
+>
+> The scrape skill now handles:
+> - Issue creation
+> - Duplicate detection and comments
+> - Milestone assignment
+> - Auto-filter labeling and closing
+>
+> This file is retained for reference only. Do not invoke this skill directly.
+
+---
+
+## Original Documentation (Reference Only)
 
 Store competitions as GitHub issues with project board integration.
 

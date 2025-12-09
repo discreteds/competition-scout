@@ -47,16 +47,6 @@ def _parse_closing_date(text: str) -> str | None:
     if not text:
         return None
 
-    # Common patterns
-    patterns = [
-        # "31 December 2024", "31 Dec 2024"
-        r"(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{4})",
-        # "2024-12-31"
-        r"(\d{4})-(\d{2})-(\d{2})",
-        # "31/12/2024" or "31-12-2024"
-        r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})",
-    ]
-
     month_map = {
         "jan": 1, "january": 1,
         "feb": 2, "february": 2,
@@ -72,8 +62,23 @@ def _parse_closing_date(text: str) -> str | None:
         "dec": 12, "december": 12,
     }
 
-    # Try pattern 1: "31 December 2024"
-    match = re.search(patterns[0], text, re.IGNORECASE)
+    month_pattern = r"(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+
+    # Try US format: "January 5, 2024", "Jan 5, 2024"
+    us_pattern = month_pattern + r"\s+(\d{1,2}),?\s+(\d{4})"
+    match = re.search(us_pattern, text, re.IGNORECASE)
+    if match:
+        month = month_map.get(match.group(1).lower()[:3], 1)
+        day = int(match.group(2))
+        year = int(match.group(3))
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            pass
+
+    # Try UK format: "5 January 2024", "5 Jan 2024"
+    uk_pattern = r"(\d{1,2})\s+" + month_pattern + r"\s+(\d{4})"
+    match = re.search(uk_pattern, text, re.IGNORECASE)
     if match:
         day = int(match.group(1))
         month = month_map.get(match.group(2).lower()[:3], 1)
@@ -83,16 +88,18 @@ def _parse_closing_date(text: str) -> str | None:
         except ValueError:
             pass
 
-    # Try pattern 2: "2024-12-31"
-    match = re.search(patterns[1], text)
+    # Try ISO format: "2024-12-31"
+    iso_pattern = r"(\d{4})-(\d{2})-(\d{2})"
+    match = re.search(iso_pattern, text)
     if match:
         try:
             return date(int(match.group(1)), int(match.group(2)), int(match.group(3))).isoformat()
         except ValueError:
             pass
 
-    # Try pattern 3: "31/12/2024"
-    match = re.search(patterns[2], text)
+    # Try AU/UK numeric: "31/12/2024" or "31-12-2024"
+    numeric_pattern = r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})"
+    match = re.search(numeric_pattern, text)
     if match:
         try:
             return date(int(match.group(3)), int(match.group(2)), int(match.group(1))).isoformat()
@@ -319,9 +326,37 @@ def extract_competitions_com_au_listings(page: Page) -> list[dict]:
                 const prizeEl = card.querySelector('.badge-success, [class*="prize"]');
                 const prize = prizeEl?.textContent?.trim() || '';
 
-                // Get closing date - look for "Ends Dec 14" pattern
-                const dateMatch = card.textContent.match(/Ends?\\s+(\\w+\\s+\\d{1,2})/i);
-                const closingText = dateMatch ? dateMatch[0] : '';
+                // Get closing date - look for "Ends Jan 5, 2026", "X days left", or "Ends Today"
+                let closingText = '';
+                const fullDateMatch = card.textContent.match(/Ends?\\s+(\\w+\\s+\\d{1,2},?\\s*\\d{4})/i);
+                const shortDateMatch = card.textContent.match(/Ends?\\s+(\\w+\\s+\\d{1,2})(?![,\\d])/i);
+                const daysLeftMatch = card.textContent.match(/(\\d+)\\s+days?\\s+left/i);
+                const endsTodayMatch = card.textContent.match(/Ends?\\s+Today/i);
+
+                if (fullDateMatch) {
+                    closingText = fullDateMatch[1];
+                } else if (endsTodayMatch) {
+                    // Today
+                    const today = new Date();
+                    closingText = today.toLocaleDateString('en-AU', {day: 'numeric', month: 'long', year: 'numeric'});
+                } else if (daysLeftMatch) {
+                    // Convert "X days left" to actual date
+                    const daysLeft = parseInt(daysLeftMatch[1]);
+                    const closeDate = new Date();
+                    closeDate.setDate(closeDate.getDate() + daysLeft);
+                    closingText = closeDate.toLocaleDateString('en-AU', {day: 'numeric', month: 'long', year: 'numeric'});
+                } else if (shortDateMatch) {
+                    // Add current year if no year provided, handle year rollover
+                    const monthDay = shortDateMatch[1];
+                    const now = new Date();
+                    let year = now.getFullYear();
+                    // If the date looks like it's in the past (e.g., Jan when we're in Dec), use next year
+                    const monthMatch = monthDay.match(/^(Jan|Feb|Mar)/i);
+                    if (monthMatch && now.getMonth() >= 10) {
+                        year = now.getFullYear() + 1;
+                    }
+                    closingText = monthDay + ', ' + year;
+                }
 
                 // Get brand
                 const brandEl = card.querySelector('a[href*="/tag/brand/"]');

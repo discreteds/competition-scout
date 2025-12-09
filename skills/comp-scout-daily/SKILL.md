@@ -1,24 +1,41 @@
 ---
 name: comp-scout-daily
-description: End-to-end automated daily competition workflow. Scrapes, filters, persists, analyzes, composes entries, and outputs report - all unattended for cron execution.
+description: End-to-end automated daily competition workflow. Orchestrates scrape, analyze, compose, and notify skills - all unattended for cron execution.
 ---
 
 # Daily Competition Scout
 
-Automated end-to-end workflow for cron/scheduled execution. Runs completely unattended with no user prompts.
+Automated end-to-end workflow for cron/scheduled execution. **Orchestrates other skills** rather than duplicating their logic.
 
 ## What This Skill Does
 
-1. Scrapes all listing pages (competitions.com.au, netrewards.com.au)
-2. Fetches full details for each new competition
-3. Checks for duplicates against existing GitHub issues
-4. Applies auto-filter tags based on user preferences
-5. Creates GitHub issues for new competitions
-6. For each new, non-filtered competition:
-   - Runs strategy analysis
-   - Generates entry drafts using matching saved stories
-   - Persists analysis and entries as comments
-7. Outputs structured summary report
+This skill is a **workflow orchestrator** that invokes other skills in sequence:
+
+```
+┌─────────────────┐
+│ comp-scout-daily│
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐     Scrapes listings, fetches details,
+│ comp-scout-scrape│────▶ checks duplicates, persists issues
+└────────┬────────┘
+         │
+         ▼ (for each new, non-filtered issue)
+┌─────────────────┐
+│comp-scout-analyze│────▶ Generates strategy (--unattended)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│comp-scout-compose│────▶ Drafts entries (--unattended)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│comp-scout-notify │────▶ Sends email digest
+└─────────────────┘
+```
 
 **Runs completely unattended - no user prompts during execution.**
 
@@ -48,12 +65,13 @@ Automated end-to-end workflow for cron/scheduled execution. Runs completely unat
 
 ### Phase 1: Configuration
 
+Determine target repository and load user preferences:
+
 ```bash
-# Determine target repository
 TARGET_REPO="${TARGET_REPO:-discreteds/competition-scout-25WOL}"
 
 # Fetch user preferences from data repo
-PREFERENCES=$(gh api repos/$TARGET_REPO/contents/CLAUDE.md -H "Accept: application/vnd.github.raw" 2>/dev/null)
+gh api repos/$TARGET_REPO/contents/CLAUDE.md -H "Accept: application/vnd.github.raw" 2>/dev/null
 ```
 
 Parse from CLAUDE.md:
@@ -61,130 +79,60 @@ Parse from CLAUDE.md:
 - Saved stories for entry composition
 - Personal context (partner name, location)
 
-### Phase 2: Scrape Listings
+### Phase 2: Invoke comp-scout-scrape
 
-```bash
-# Scrape all listing pages
-python skills/comp-scout-scrape/scraper.py listings > /tmp/listings.json
-```
+**Delegate to the scrape skill** - do not duplicate its logic.
 
-Output: List of competitions with basic info (URL, title, prize, closing date)
-
-### Phase 3: Check for Existing Issues
-
-```bash
-# Get all existing competition issues
-gh issue list -R "$TARGET_REPO" \
-  --label "competition" \
-  --state all \
-  --json number,title,body,state,labels \
-  --limit 500 > /tmp/existing.json
-```
-
-Compare by:
-1. URL in issue body (exact match)
-2. Normalized title similarity (>80%)
-
-Categorize each scraped competition:
-- **New**: Not found in existing issues
-- **Duplicate**: Same competition found on different site (add comment)
-- **Tracked**: Already has an issue
-
-### Phase 4: Fetch Full Details
-
-For new competitions only:
-
-```bash
-# Build URL list
-NEW_URLS='{"urls": ["url1", "url2", ...]}'
-
-# Batch fetch details
-echo "$NEW_URLS" | python skills/comp-scout-scrape/scraper.py details-batch > /tmp/details.json
-```
-
-### Phase 5: Apply Auto-Filters
-
-For each new competition, check against filter keywords from CLAUDE.md:
+The scrape skill handles:
+1. Scraping all listing pages
+2. Fetching full details for new competitions
+3. Checking for duplicates against existing issues
+4. Applying auto-filter rules
+5. Creating issues (or closing if filtered)
+6. Adding duplicate comments to existing issues
 
 ```
-for-kids keywords: kids, children, baby, toddler, Lego, Disney, family pack
-cruise keywords: cruise, P&O, Carnival, Royal Caribbean
+Invoke: comp-scout-scrape
+Mode: Unattended (automatic)
+Output: List of new issue numbers created
 ```
 
-If competition title/prize matches keywords:
-- Mark as filtered
-- Will be created + immediately closed with filter label
+### Phase 3: Invoke comp-scout-analyze (for each new issue)
 
-### Phase 6: Persist New Competitions
+**Delegate to the analyze skill** with `--unattended` flag.
 
-#### For Non-Filtered Competitions
+For each new, non-filtered competition issue:
 
-```bash
-gh issue create -R "$TARGET_REPO" \
-  --title "$TITLE" \
-  --label "competition" \
-  --label "25wol" \
-  --body "..."
-
-gh issue edit $ISSUE_NUMBER -R "$TARGET_REPO" --milestone "$CLOSING_MONTH"
+```
+Invoke: comp-scout-analyze --unattended
+Input: Issue number from Phase 2
+Output: Strategy comment added to issue
 ```
 
-#### For Filtered Competitions
+The analyze skill in unattended mode:
+- Uses sponsor category to determine default tone
+- Generates 5 standard angle ideas
+- Auto-persists strategy as comment
 
-```bash
-# Create for record-keeping
-gh issue create -R "$TARGET_REPO" \
-  --title "$TITLE" \
-  --label "competition" \
-  --label "$FILTER_LABEL" \
-  --body "..."
+### Phase 4: Invoke comp-scout-compose (for each new issue)
 
-# Immediately close
-gh issue close $ISSUE_NUMBER -R "$TARGET_REPO" \
-  --comment "Auto-filtered: matches '$KEYWORD' in preferences"
+**Delegate to the compose skill** with `--unattended` flag.
+
+For each new, non-filtered competition issue:
+
+```
+Invoke: comp-scout-compose --unattended
+Input: Issue number, strategy from Phase 3
+Output: Entry drafts comment added, entry-drafted label applied
 ```
 
-#### For Duplicate Sources
+The compose skill in unattended mode:
+- Matches saved stories from CLAUDE.md to competition
+- Uses best-matching story or generic approach
+- Generates 3-5 entry variations
+- Auto-persists with recommendation
 
-```bash
-gh issue comment $EXISTING_ISSUE -R "$TARGET_REPO" \
-  --body "### Also found on $OTHER_SITE..."
-```
-
-### Phase 7: Analyze and Compose (Non-Filtered Only)
-
-For each new, non-filtered competition:
-
-#### 7a. Strategy Analysis
-
-Generate strategy using comp-scout-analyze patterns:
-- Identify sponsor category and brand voice
-- Determine winning tone
-- Generate 3-5 angle ideas
-
-```bash
-gh issue comment $ISSUE_NUMBER -R "$TARGET_REPO" --body "## Strategy Analysis..."
-```
-
-#### 7b. Match Saved Stories
-
-Check saved stories from CLAUDE.md against competition:
-- Match story keywords to prompt/brand/prize
-- Select best matching story (or use generic approach)
-
-#### 7c. Compose Entries
-
-Generate 3-5 entry variations using:
-- Matched story context (if available)
-- Appropriate arc structure for sponsor type
-- Personal context from CLAUDE.md
-
-```bash
-gh issue comment $ISSUE_NUMBER -R "$TARGET_REPO" --body "## Entry Drafts..."
-gh issue edit $ISSUE_NUMBER -R "$TARGET_REPO" --add-label "entry-drafted"
-```
-
-### Phase 8: Check Closing Soon
+### Phase 5: Check Closing Soon
 
 Query for competitions closing within 3 days:
 
@@ -197,7 +145,16 @@ gh issue list -R "$TARGET_REPO" \
 
 Parse closing dates and flag urgent items.
 
-### Phase 9: Output Summary Report
+### Phase 6: Invoke comp-scout-notify
+
+**Delegate to the notify skill** for email digest.
+
+```
+Invoke: comp-scout-notify send
+Output: Email sent to configured recipients
+```
+
+### Phase 7: Output Summary Report
 
 ```markdown
 ## Daily Competition Scout Report - 2025-12-09
@@ -247,6 +204,7 @@ The skill makes NO interactive prompts during execution:
 | Entry generation | All entries drafted with star ratings; recommendation noted |
 | Filter decisions | Based on keywords in CLAUDE.md preferences |
 | Duplicates | Add comment to existing issue automatically |
+| Tone selection | Based on sponsor category (see comp-scout-analyze) |
 
 All choices are logged in the report for user review.
 
@@ -256,7 +214,9 @@ All choices are logged in the report for user review.
 |-------|----------|
 | Scrape fails for one site | Log error, continue with other site |
 | Issue creation fails | Log error, skip to next competition |
-| Detail fetch fails | Use listing data only, note incomplete |
+| Analyze fails for one issue | Log error, skip compose for that issue |
+| Compose fails for one issue | Log error, continue to next issue |
+| Notify fails | Log error, report still generated |
 | No new competitions | Report "No new competitions found" |
 
 Errors are included in the final report.
@@ -276,16 +236,17 @@ Must contain:
 - **Saved Stories**: Personal stories for automatic matching (optional)
 - **Personal Context**: Partner name, location, interests
 
-## Integration with Other Skills
+## Skill Invocation Pattern
 
-This skill **orchestrates** the workflow using patterns from:
+This skill **orchestrates** - it does not duplicate logic:
 
-| Skill | Used For |
-|-------|----------|
-| comp-scout-scrape | Scraping and batch detail fetching |
-| comp-scout-analyze | Strategy analysis patterns |
-| comp-scout-compose | Entry generation patterns |
-| comp-scout-persist | GitHub issue creation |
+| Skill | Invoked By Daily | Mode |
+|-------|------------------|------|
+| comp-scout-scrape | Yes | Automatic (handles own persistence) |
+| comp-scout-analyze | Yes | `--unattended` flag |
+| comp-scout-compose | Yes | `--unattended` flag |
+| comp-scout-notify | Yes | Automatic |
+| comp-scout-persist | No | Logic merged into scrape |
 
 Individual skills remain available for interactive use when you want manual control.
 
@@ -301,34 +262,40 @@ Phase 1: Loading configuration
   Filter rules: for-kids (9 keywords), cruise (6 keywords)
   Saved stories: 2 available
 
-Phase 2: Scraping listings
+Phase 2: Invoking comp-scout-scrape
   competitions.com.au: 8 competitions
   netrewards.com.au: 5 competitions
-  Total: 13 competitions
+  New issues created: #43, #44, #45
+  Filtered issues (closed): #46, #47
+  Duplicate comments: #38
 
-Phase 3: Checking existing issues
-  Existing issues: 42
-  New: 5
-  Duplicates: 1
-  Already tracked: 7
+Phase 3: Invoking comp-scout-analyze (--unattended)
+  #43: Strategy added (Food/beverage → Relatable, sensory)
+  #44: Strategy added (Travel → Discovery, bucket-list)
+  #45: Strategy added (Tech → Knowledgeable, self-aware humor)
 
-Phase 4: Fetching full details
-  Fetched 5 competition details
+Phase 4: Invoking comp-scout-compose (--unattended)
+  #43: 3 entries drafted (using saved story: Sunday BBQ)
+  #44: 4 entries drafted (generic approach)
+  #45: 3 entries drafted (generic approach)
 
-Phase 5: Applying filters
-  Filtered: 2 (1 for-kids, 1 cruise)
-  Remaining: 3
+Phase 5: Checking closing soon
+  3 competitions closing within 3 days
 
-Phase 6: Persisting
-  Created 3 new issues: #43, #44, #45
-  Created 2 filtered issues (closed): #46, #47
-  Added 1 duplicate comment to #38
-
-Phase 7: Analyzing and composing
-  #43: Strategy added, 3 entries drafted (using saved story)
-  #44: Strategy added, 4 entries drafted
-  #45: Strategy added, 3 entries drafted
+Phase 6: Invoking comp-scout-notify
+  Email sent to 2 recipients
 
 ## Daily Competition Scout Report - 2025-12-09
 [Full report as shown above]
 ```
+
+## Key Design Principle
+
+**DRY (Don't Repeat Yourself)**: This skill invokes other skills rather than reimplementing their logic. This means:
+
+1. Bug fixes in individual skills automatically apply to daily workflow
+2. Interactive and unattended modes share the same core logic
+3. Each skill has a single source of truth for its behavior
+4. Testing individual skills also tests the daily workflow
+
+If you need to change how analysis works, change `comp-scout-analyze` - the daily workflow will automatically use the updated logic.

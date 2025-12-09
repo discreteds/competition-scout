@@ -7,9 +7,34 @@ description: Generate authentic, memorable competition entries (25 words or less
 
 Generate authentic, memorable "25 words or less" competition entries and **automatically save to GitHub issue**.
 
+## Execution Modes
+
+| Mode | Behavior |
+|------|----------|
+| **Interactive** (default) | Ask for user context, stories, tone preferences |
+| **Unattended** | Use saved stories or generic approach, no prompts |
+
+The `comp-scout-daily` workflow always invokes this skill in **unattended mode**.
+
+### Interactive Mode
+
+When run interactively, this skill asks:
+- "What genuine experience do you have with this brand/product?"
+- "Any specific memory or story that relates to the prompt?"
+- "Tone preference: funny, sincere, or mix?"
+
+### Unattended Mode
+
+When invoked with `--unattended` or by `comp-scout-daily`:
+- Checks saved stories from CLAUDE.md for keyword matches
+- Uses best-matching story, or generic approach if none match
+- Generates 3-5 entries with varied arcs
+- Auto-persists with recommendation highlighted
+- No user prompts - runs end-to-end automatically
+
 ## What This Skill Does
 
-1. Gathers user context to find authentic angles
+1. Gathers user context to find authentic angles (interactive) or uses saved stories (unattended)
 2. Generates 3-5 entry variations with different arcs
 3. Rates and recommends the strongest entries
 4. **Auto-persists entries as comment on GitHub issue**
@@ -21,8 +46,11 @@ Generate authentic, memorable "25 words or less" competition entries and **autom
 
 - Strategy from `comp-scout-analyze` (recommended)
 - OR competition details (prompt, word_limit, brand)
-- User context (personal connection, preferences)
+- User context (personal connection, preferences) - interactive mode
 - **issue_number** (for auto-persist)
+
+Optional flags:
+- `--unattended` - Skip all interactive prompts, use saved stories or generic approach
 
 ## Workflow
 
@@ -411,6 +439,52 @@ recognisable to any parent, and the landing is both relatable and punchy.
 Which option do you want to submit?
 ```
 
+## Unattended Mode Details
+
+When running in unattended mode (e.g., via `comp-scout-daily`), the skill:
+
+1. **Skips all user prompts** - No context gathering questions
+2. **Uses saved stories** - Matches story keywords to competition prompt/brand
+3. **Falls back to generic** - If no story matches, uses strategy themes
+4. **Generates varied arcs** - Always produces 3-5 entries with different structures
+5. **Auto-persists immediately** - No confirmation needed
+
+### Story Matching (Unattended)
+
+The skill reads saved stories from the target repo's CLAUDE.md and matches by:
+
+1. **Keyword matching** - Story keywords vs. competition title, brand, prize, prompt
+2. **Theme matching** - Story theme vs. strategy themes (if available)
+3. **Scoring** - Rank stories by match count, use best match
+
+If no story matches (score = 0), use generic approach based on:
+- Strategy's recommended tone
+- Strategy's angle ideas
+- Sponsor category defaults
+
+### Generic Entry Patterns (No Saved Story)
+
+| Arc Type | Pattern | Example |
+|----------|---------|---------|
+| Sincere | Honest need → aspiration | "My kitchen sees more takeaway containers than..." |
+| Self-deprecating | Confession → resolution | "I've tried every [X], but this is the one..." |
+| Sensory | Scene → vivid detail | "The moment when [specific sensory detail]..." |
+| List-pivot | Credentials → gap | "I've done X, Y, Z. But never [this prize]." |
+| Comedic | Setup → pivot | "My partner says I [quirk]. [Prize] would..." |
+
+### Invocation by comp-scout-daily
+
+The daily workflow invokes this skill as:
+
+```
+For each new competition issue (after analyze):
+  1. Read issue details + strategy comment
+  2. Load saved stories from CLAUDE.md
+  3. Run comp-scout-compose with --unattended
+  4. Entries are auto-persisted as comment
+  5. entry-drafted label added
+```
+
 ## Integration
 
 This skill:
@@ -418,3 +492,4 @@ This skill:
 - Auto-saves entries to GitHub issue
 - Adds `entry-drafted` label for tracking
 - Can be followed by submission confirmation (add `entry-submitted` label)
+- Can be invoked by `comp-scout-daily` in unattended mode

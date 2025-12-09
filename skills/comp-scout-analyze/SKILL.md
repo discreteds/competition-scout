@@ -7,6 +7,29 @@ description: Generate strategic analysis for competition entries and auto-persis
 
 Generate strategic analysis for "25 words or less" competition entries and **automatically add to GitHub issue**.
 
+## Execution Modes
+
+| Mode | Behavior |
+|------|----------|
+| **Interactive** (default) | Ask clarifying questions about brand voice, tone preferences |
+| **Unattended** | Use defaults based on sponsor category, no prompts |
+
+The `comp-scout-daily` workflow always invokes this skill in **unattended mode**.
+
+### Interactive Mode
+
+When run interactively, this skill may ask:
+- "What tone would you prefer? (sincere/humorous/mix)"
+- "Any specific themes you want to emphasize?"
+- "Should we focus on any particular angle?"
+
+### Unattended Mode
+
+When invoked with `--unattended` or by `comp-scout-daily`:
+- Uses sponsor category to determine default tone
+- Generates standard set of 5 angle ideas
+- No user prompts - runs end-to-end automatically
+
 ## What This Skill Does
 
 1. Analyzes the competition's brand, sponsor type, and prompt
@@ -24,6 +47,9 @@ Competition data (from GitHub issue or `comp-scout-scrape`):
 - prompt, word_limit
 - closing_date
 - **issue_number** (for auto-persist)
+
+Optional flags:
+- `--unattended` - Skip all interactive prompts, use defaults
 
 ## Workflow
 
@@ -271,9 +297,42 @@ morning coffee ritual special?
 Ready to compose entries based on this strategy?
 ```
 
+## Unattended Mode Details
+
+When running in unattended mode (e.g., via `comp-scout-daily`), the skill:
+
+1. **Skips all user prompts** - No tone preference questions
+2. **Uses default tone mapping** - Based on sponsor category (see Step 2)
+3. **Generates standard angles** - Always produces 5 angle ideas
+4. **Auto-persists immediately** - No confirmation needed
+
+### Default Tone Mapping (Unattended)
+
+| Sponsor Category | Default Tone |
+|------------------|--------------|
+| Wellness/luxury | Sincere, aspirational |
+| Tech/gaming | Knowledgeable, self-aware humor |
+| Food/beverage | Relatable, sensory |
+| Travel | Discovery, bucket-list |
+| Retail/general | Personality, memorable |
+| Rural/agricultural | Practical, honest |
+
+### Invocation by comp-scout-daily
+
+The daily workflow invokes this skill as:
+
+```
+For each new competition issue:
+  1. Read issue details
+  2. Run comp-scout-analyze with --unattended
+  3. Strategy is auto-persisted as comment
+  4. Proceed to comp-scout-compose
+```
+
 ## Integration
 
 This skill:
 - Reads competition data from GitHub issues
 - Auto-saves strategy as comment
 - Outputs strategy for `comp-scout-compose` to use
+- Can be invoked by `comp-scout-daily` in unattended mode
