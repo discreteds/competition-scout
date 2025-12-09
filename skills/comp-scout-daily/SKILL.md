@@ -19,6 +19,21 @@ When this skill is invoked:
 
 If you find yourself about to ask a question, STOP and use the default behavior instead.
 
+## CRITICAL: Persist Everything - No Filtering
+
+**"25WOL" is a category name, NOT a filter criterion.**
+
+- **Persist ALL competitions** from the scraped pages
+- Do NOT filter by word limit (25, 50, 100 words - all are valid)
+- Do NOT filter by competition type (lotteries are fine to track)
+- Do NOT filter by prize type or value
+- The source URLs are already curated - your job is to persist what's there
+
+**Auto-tagging (for-kids, cruise) is for LABELING, not skipping:**
+- Tagged competitions ARE STILL CREATED as issues
+- They just get a label and are closed automatically
+- This is for record-keeping, not exclusion
+
 ## What This Skill Does
 
 This skill is a **workflow orchestrator** that invokes other skills in sequence:

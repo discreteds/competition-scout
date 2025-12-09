@@ -5,17 +5,26 @@ description: Scrape competition websites, extract structured data, and auto-pers
 
 # Competition Scraper
 
-Scrape "25 words or less" competitions from Australian aggregator sites and **automatically persist to GitHub**.
+Scrape creative writing competitions from Australian aggregator sites and **automatically persist to GitHub**.
+
+## CRITICAL: Persist Everything
+
+**"25WOL" is a category name for creative writing competitions, NOT a filter.**
+
+- Persist ALL competitions from the scraped pages, regardless of word limit (25, 50, 100 words - all valid)
+- The source URLs are already filtered to this competition style
+- Your job is to scrape and persist, NOT to filter or exclude
+- Do NOT skip competitions because of word count, prize type, or other criteria
 
 ## What This Skill Does
 
 1. Scrapes competitions.com.au and netrewards.com.au
 2. Extracts structured data (dates, prompts, prizes)
 3. Checks for duplicates against existing GitHub issues
-4. Creates issues for new competitions
+4. **Creates issues for ALL new competitions found**
 5. Adds comments for duplicates found on other sites
 
-**No manual "please persist" step required.**
+**No manual "please persist" step required. No filtering by word limit or competition type.**
 
 ## Prerequisites
 
@@ -101,29 +110,31 @@ For multiple new competitions, use batch mode:
 echo '{"urls": ["url1", "url2", ...]}' | python skills/comp-scout-scrape/scraper.py details-batch
 ```
 
-### Step 4.5: Apply Auto-Filter Rules
+### Step 4.5: Apply Auto-Tagging Rules (NOT Filtering)
 
-Before persisting, check competitions against user preferences from the data repo's CLAUDE.md.
+**IMPORTANT: Auto-tagging is for LABELING issues, not for skipping/excluding competitions.**
+
+Check competitions against user preferences from the data repo's CLAUDE.md to determine which labels to apply.
 
 1. Fetch preferences:
 ```bash
 gh api repos/$TARGET_REPO/contents/CLAUDE.md -H "Accept: application/vnd.github.raw" 2>/dev/null
 ```
 
-2. Parse the Detection Keywords section for filter rules
+2. Parse the Detection Keywords section for tagging rules
 
 3. For each competition, check if title/prize matches any keywords:
 ```
-For each filter_rule in [for-kids, cruise]:
-  For each keyword in filter_rule.keywords:
+For each tag_rule in [for-kids, cruise]:
+  For each keyword in tag_rule.keywords:
     If keyword.lower() in (competition.title + competition.prize_summary).lower():
-      Mark competition as filtered
-      Filter label: filter_rule.label
+      Add tag_rule.label to issue labels
 ```
 
-4. Filtered competitions are still persisted (for record-keeping) but:
-   - Add the filter label (e.g., `for-kids`, `cruise`)
-   - Close the issue immediately with explanation comment
+4. **ALL competitions are ALWAYS persisted as issues.** Tagged competitions:
+   - Get the relevant label applied (e.g., `for-kids`, `cruise`)
+   - Are closed immediately with explanation comment
+   - But they ARE STILL CREATED as issues (for record-keeping and potential review)
 
 ### Step 5: Auto-Persist Results
 
