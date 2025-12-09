@@ -21,6 +21,18 @@ pip install -e .
 playwright install chromium
 ```
 
+
+### 2. Install the Plugin
+
+```bash
+# Add the marketplace
+/plugin marketplace add discreteds/competition-scout
+
+# Install the plugin
+/plugin install competition-scout@competition-scout
+```
+
+
 ## Architecture
 
 ```
