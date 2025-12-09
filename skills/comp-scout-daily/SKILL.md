@@ -19,23 +19,24 @@ When this skill is invoked:
 
 If you find yourself about to ask a question, STOP and use the default behavior instead.
 
-## CRITICAL: Persist Everything the Scraper Returns
+## CRITICAL: Check for Duplicates Before Persisting
 
-**"25WOL" is a category name for creative writing competitions, NOT a word-count filter.**
+**Each competition should only be stored ONCE, even if it appears on multiple sites.**
 
-The Python scraper already filters:
-- ✅ Sponsored/lottery ads (purchase-required, via CSS class detection)
-- ✅ Non-creative-writing competitions (checks for "words or less" text)
+Before creating any issue, you MUST:
+1. Get all existing issues: `gh issue list -R $TARGET_REPO --label competition --state all --json number,title,body --limit 500`
+2. For each scraped competition, check if it already exists by:
+   - URL appears anywhere in any issue body (search full text - issues may have multiple URLs from different sites)
+   - OR normalized title similarity >80% to any existing issue title
+3. If URL found in existing issue → SKIP (already tracked)
+4. If title >80% similar but different URL → add comment to existing issue with the alternate URL
+5. If truly new (URL not found AND title <80% similar) → create issue
 
-**YOU must NOT add additional filters:**
-- Do NOT filter by word limit (25, 50, 100 words - all are valid creative writing comps)
-- Do NOT filter by prize type or value
-- If the scraper returns it, PERSIST IT
+**Word limit clarification:** "25WOL" is a category name. Competitions with 25, 50, or 100 word limits are all valid - persist them (if new).
 
 **Auto-tagging (for-kids, cruise) is for LABELING, not skipping:**
-- Tagged competitions ARE STILL CREATED as issues
+- Tagged competitions ARE STILL CREATED as issues (if new)
 - They just get a label and are closed automatically
-- This is for record-keeping, not exclusion
 
 ## What This Skill Does
 
@@ -109,22 +110,27 @@ Parse from CLAUDE.md:
 - Saved stories for entry composition
 - Personal context (partner name, location)
 
-### Phase 2: Scrape AND Persist (Automatic)
+### Phase 2: Scrape, Dedupe, and Persist (Automatic)
 
 **Execute the scrape workflow directly** - no questions asked.
 
 YOU MUST:
-1. Run the scraper to get listings
-2. Check for duplicates against existing issues
-3. Fetch details for NEW competitions only
-4. **CREATE ISSUES IMMEDIATELY** for new competitions (no asking)
-5. Apply auto-filter rules (create + close filtered issues)
-6. Add duplicate comments to existing issues
+1. Run the scraper to get listings from both sites
+2. **BEFORE creating any issues**, fetch ALL existing issues (open AND closed, limit 500)
+3. For each scraped competition:
+   - Search all issue bodies for the scraped URL (full text search, not field match)
+   - If URL found → SKIP (already tracked)
+   - If URL not found, check title similarity against all existing titles
+   - If title >80% similar → add comment to existing issue with alternate URL, don't create new
+   - If URL not found AND title <80% similar → this is NEW
+4. Fetch details for NEW competitions only
+5. Create issues for NEW competitions (no asking)
+6. Apply auto-filter rules (create + close filtered issues)
 
-**DO NOT ask "Would you like me to persist these?" - JUST CREATE THE ISSUES.**
+**Key point: Most scraped competitions will already be tracked. Only create issues for truly new ones.**
 
 ```
-Output: List of new issue numbers created
+Output: List of new issue numbers created (usually 0-3 per day)
 ```
 
 ### Phase 3: Analyze Each New Issue (Automatic)

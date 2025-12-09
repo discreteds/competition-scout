@@ -7,28 +7,33 @@ description: Scrape competition websites, extract structured data, and auto-pers
 
 Scrape creative writing competitions from Australian aggregator sites and **automatically persist to GitHub**.
 
-## CRITICAL: Persist Everything the Scraper Returns
-
-**"25WOL" is a category name for creative writing competitions, NOT a word-count filter.**
-
-The Python scraper (`scraper.py`) already filters out:
-- ✅ Sponsored/lottery ads (purchase-required, detected via `/exit/` links in CSS)
-- ✅ Non-creative-writing competitions (must contain "words or less" text)
-
-**YOU must NOT add additional filters:**
-- Do NOT filter by word limit (25, 50, 100 words - all are valid creative writing comps)
-- Do NOT filter by prize type or value
-- If the scraper returns it, PERSIST IT as an issue
-
 ## What This Skill Does
 
 1. Scrapes competitions.com.au and netrewards.com.au
 2. Extracts structured data (dates, prompts, prizes)
-3. Checks for duplicates against existing GitHub issues
-4. **Creates issues for ALL new competitions found**
-5. Adds comments for duplicates found on other sites
+3. **Checks for duplicates** against existing GitHub issues (by URL and title similarity)
+4. Creates issues for **NEW** competitions only
+5. Adds comments to existing issues when same competition found on another site
+6. Skips competitions that are already tracked
 
-**No manual "please persist" step required. No filtering by word limit or competition type.**
+**The scraper already filters out sponsored/lottery ads. Your job is to check for duplicates, then persist only new competitions.**
+
+## What Counts as "New"
+
+A competition is NEW if:
+- Its URL is not found in any existing issue body (check the full body text, not just the primary URL field)
+- AND its normalized title is <80% similar to all existing issue titles
+
+A competition is a DUPLICATE if:
+- Its URL appears anywhere in an existing issue (body text, comments) → already tracked, skip
+- Its normalized title is >80% similar to an existing issue title → likely same competition, skip
+- Same competition found on a different aggregator site → add comment to existing issue noting the alternate URL
+
+**Note:** An issue body may contain multiple URLs (one per aggregator site). When checking for duplicates, search the entire issue body for the scraped URL, not just a specific field.
+
+## Word Limit Clarification
+
+**"25WOL" is a category name, NOT a filter.** Competitions with 25, 50, or 100 word limits are all valid creative writing competitions - persist them all (if new).
 
 ## Prerequisites
 
